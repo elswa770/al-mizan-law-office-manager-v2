@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # ⚖️ Al-Mizan Law Office Manager
 
 نظام إدارة متكامل للمكاتب القانونية والقضايا، مبني بتقنيات حديثة لتسهيل إدارة العمل القانوني.
@@ -138,3 +139,7 @@ al-mizan-law-office-manager/
 ---
 
 **⚖️ Al-Mizan Law Office Manager - الحل الأمثل لإدارة المكاتب القانونية**
+=======
+# al-mizan-law-office-manager-v2
+al-mizan law office manager
+>>>>>>> 63a8b4d6ed27a1e2467bcad767310cbe61358b7d
