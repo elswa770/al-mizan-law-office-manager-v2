@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
       server: {
         port: 3000,
         host: '0.0.0.0',
+        strictPort: false, // Allow Vite to try next available port
         hmr: {
           port: 3001,
           overlay: true
@@ -18,6 +19,9 @@ export default defineConfig(({ mode }) => {
         headers: {
           'Cross-Origin-Opener-Policy': 'unsafe-none',
           'Cross-Origin-Embedder-Policy': 'unsafe-none'
+        },
+        fs: {
+          allow: ['..']
         }
       },
       plugins: [react()],
@@ -32,6 +36,9 @@ export default defineConfig(({ mode }) => {
       },
       build: {
         chunkSizeWarningLimit: 2500
+      },
+      optimizeDeps: {
+        include: ['firebase', '@firebase/*']
       }
     };
 });

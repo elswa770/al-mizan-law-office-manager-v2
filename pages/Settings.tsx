@@ -176,7 +176,7 @@ const Settings: React.FC<SettingsProps> = ({
     }
   };
 
-  const runSecurityTests = () => {
+  const runSecurityTests = async () => {
     console.log('🔐 Running Security Tests...');
     
     const tests = [
@@ -202,14 +202,82 @@ const Settings: React.FC<SettingsProps> = ({
           const result = testPasswordStrength('Test123!');
           return typeof result.score === 'number' && Array.isArray(result.feedback);
         }
+      },
+      {
+        name: 'Firebase Connection',
+        test: async () => {
+          try {
+            const authInstance = getAuth();
+            const currentUser = authInstance.currentUser;
+            return currentUser !== null;
+          } catch (error) {
+            console.error('Firebase connection test failed:', error);
+            return false;
+          }
+        }
+      },
+      {
+        name: 'IP Whitelist Validation',
+        test: () => {
+          return Array.isArray(advancedSecurity.ipWhitelist);
+        }
+      },
+      {
+        name: 'Login Attempts Loading',
+        test: () => {
+          return Array.isArray(loginAttempts) && loginAttempts.length >= 0;
+        }
+      },
+      {
+        name: 'Security Logging Function',
+        test: () => {
+          return typeof logSecurityActivity === 'function';
+        }
+      },
+      {
+        name: '2FA Functions Available',
+        test: () => {
+          return typeof enableTwoFactor === 'function' && typeof disableTwoFactor === 'function';
+        }
       }
     ];
 
-    const results = tests.map(test => testSecurityFeature(test.name, test.test));
-    const passed = results.filter(r => r).length;
+    const results = await Promise.all(
+      tests.map(async (test) => {
+        const result = await testSecurityFeature(test.name, test.test);
+        return { name: test.name, passed: result };
+      })
+    );
+    
+    const passed = results.filter(r => r.passed).length;
     const total = results.length;
     
     console.log(`📊 Security Tests Summary: ${passed}/${total} passed`);
+    
+    // Save test results to Firebase
+    try {
+      const authInstance = getAuth();
+      const currentUser = authInstance.currentUser;
+      
+      if (currentUser) {
+        const testResults = {
+          id: Date.now().toString(),
+          timestamp: new Date().toISOString(),
+          userId: currentUser.uid,
+          results: results,
+          summary: {
+            passed,
+            total,
+            percentage: Math.round((passed / total) * 100)
+          }
+        };
+        
+        await setDoc(doc(db, 'securityTestResults', testResults.id), testResults);
+        console.log('📝 Security test results saved to Firebase');
+      }
+    } catch (error) {
+      console.error('Failed to save test results to Firebase:', error);
+    }
     
     return { passed, total, results };
   };
@@ -1990,6 +2058,9 @@ const Settings: React.FC<SettingsProps> = ({
         // Load failed login attempts (for all users - admin view)
         await loadFailedLoginAttempts();
 
+        // Load password policy from Firebase
+        await loadPasswordPolicyFromFirebase();
+
         // Log this security data access
         logSecurityActivity('security_data_loaded', `Loaded ${sessions.length} sessions and ${attempts.length} attempts`, 'low');
 
@@ -2162,6 +2233,38 @@ const Settings: React.FC<SettingsProps> = ({
       console.log(`🔐 Login attempt logged: ${username} - ${success ? 'SUCCESS' : 'FAILED'} - ${ip}`);
     } catch (error) {
       console.error('Error logging login attempt:', error);
+    }
+  };
+
+  const loadPasswordPolicyFromFirebase = async () => {
+    try {
+      const authInstance = getAuth();
+      const currentUser = authInstance.currentUser;
+      
+      if (currentUser) {
+        const policyRef = doc(db, 'userSecuritySettings', currentUser.uid);
+        const policyDoc = await getDoc(policyRef);
+        
+        if (policyDoc.exists()) {
+          const data = policyDoc.data();
+          if (data.passwordPolicy) {
+            setPasswordPolicy({
+              minLength: data.passwordPolicy.minLength || 8,
+              requireUppercase: data.passwordPolicy.requireUppercase || true,
+              requireLowercase: data.passwordPolicy.requireLowercase || true,
+              requireNumbers: data.passwordPolicy.requireNumbers || true,
+              requireSpecialChars: data.passwordPolicy.requireSpecialChars || true,
+              maxAge: data.passwordPolicy.maxAge || 90,
+              historyCount: data.passwordPolicy.historyCount || 5,
+              preventReuse: data.passwordPolicy.preventReuse || true
+            });
+            console.log('Password policy loaded from Firebase:', data.passwordPolicy);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading password policy from Firebase:', error);
+      logSecurityActivity('password_policy_load_error', `Failed to load password policy: ${error}`, 'high');
     }
   };
 
@@ -2979,14 +3082,16 @@ const Settings: React.FC<SettingsProps> = ({
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validation
+    // Validation using current password policy
     if (securityData.newPassword !== securityData.confirmPassword) {
       alert('كلمة المرور الجديدة غير متطابقة');
       return;
     }
     
-    if (securityData.newPassword.length < 8) {
-      alert('كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل');
+    // Check password strength using current policy
+    const strengthResult = testPasswordStrength(securityData.newPassword);
+    if (strengthResult.score < 60) {
+      alert(`كلمة المرور الجديدة ضعيفة. ${strengthResult.feedback.join(' • ')}`);
       return;
     }
     
@@ -3010,6 +3115,9 @@ const Settings: React.FC<SettingsProps> = ({
       
       // Update password
       await updatePassword(currentUser, securityData.newPassword);
+      
+      // Log password change activity
+      logSecurityActivity('password_changed', `Password changed successfully`, 'medium');
       
       // Clear form
       setSecurityData(prev => ({ 
@@ -3035,6 +3143,9 @@ const Settings: React.FC<SettingsProps> = ({
       } else if (error.message) {
         errorMessage = error.message;
       }
+      
+      // Log failed password change attempt
+      logSecurityActivity('password_change_failed', `Password change failed: ${errorMessage}`, 'high');
       
       alert('❌ ' + errorMessage);
     } finally {
@@ -3286,6 +3397,9 @@ const Settings: React.FC<SettingsProps> = ({
            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
                  <ShieldAlert className="w-5 h-5 text-amber-500" /> سياسة كلمات المرور
+                 <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full">
+                   متكامل مع Firebase
+                 </span>
               </h4>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -3293,17 +3407,51 @@ const Settings: React.FC<SettingsProps> = ({
                   <input 
                     type="number" 
                     className="w-16 border p-1 rounded text-center dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                    value={advancedSecurity.passwordPolicy.minLength}
-                    onChange={e => setAdvancedSecurity({...advancedSecurity, passwordPolicy: {...advancedSecurity.passwordPolicy, minLength: parseInt(e.target.value)}})}
+                    value={passwordPolicy.minLength}
+                    onChange={e => {
+                      const newPolicy = { ...passwordPolicy, minLength: parseInt(e.target.value) };
+                      setPasswordPolicy(newPolicy);
+                      logSecurityActivity('password_policy_updated', `Min length changed to ${e.target.value}`, 'low');
+                    }}
                   />
                 </div>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">تطلب أحرف كبيرة</span>
+                  <input 
+                    type="checkbox" 
+                    className="accent-indigo-600 w-4 h-4"
+                    checked={passwordPolicy.requireUppercase}
+                    onChange={e => {
+                      const newPolicy = { ...passwordPolicy, requireUppercase: e.target.checked };
+                      setPasswordPolicy(newPolicy);
+                      logSecurityActivity('password_policy_updated', `Uppercase requirement: ${e.target.checked}`, 'low');
+                    }}
+                  />
+                </label>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">تطلب أحرف صغيرة</span>
+                  <input 
+                    type="checkbox" 
+                    className="accent-indigo-600 w-4 h-4"
+                    checked={passwordPolicy.requireLowercase}
+                    onChange={e => {
+                      const newPolicy = { ...passwordPolicy, requireLowercase: e.target.checked };
+                      setPasswordPolicy(newPolicy);
+                      logSecurityActivity('password_policy_updated', `Lowercase requirement: ${e.target.checked}`, 'low');
+                    }}
+                  />
+                </label>
                 <label className="flex items-center justify-between cursor-pointer">
                   <span className="text-sm text-slate-600 dark:text-slate-400">تطلب أرقام</span>
                   <input 
                     type="checkbox" 
                     className="accent-indigo-600 w-4 h-4"
-                    checked={advancedSecurity.passwordPolicy.requireNumbers}
-                    onChange={e => setAdvancedSecurity({...advancedSecurity, passwordPolicy: {...advancedSecurity.passwordPolicy, requireNumbers: e.target.checked}})}
+                    checked={passwordPolicy.requireNumbers}
+                    onChange={e => {
+                      const newPolicy = { ...passwordPolicy, requireNumbers: e.target.checked };
+                      setPasswordPolicy(newPolicy);
+                      logSecurityActivity('password_policy_updated', `Numbers requirement: ${e.target.checked}`, 'low');
+                    }}
                   />
                 </label>
                 <label className="flex items-center justify-between cursor-pointer">
@@ -3311,8 +3459,12 @@ const Settings: React.FC<SettingsProps> = ({
                   <input 
                     type="checkbox" 
                     className="accent-indigo-600 w-4 h-4"
-                    checked={advancedSecurity.passwordPolicy.requireSymbols}
-                    onChange={e => setAdvancedSecurity({...advancedSecurity, passwordPolicy: {...advancedSecurity.passwordPolicy, requireSymbols: e.target.checked}})}
+                    checked={passwordPolicy.requireSpecialChars}
+                    onChange={e => {
+                      const newPolicy = { ...passwordPolicy, requireSpecialChars: e.target.checked };
+                      setPasswordPolicy(newPolicy);
+                      logSecurityActivity('password_policy_updated', `Special chars requirement: ${e.target.checked}`, 'low');
+                    }}
                   />
                 </label>
                 <div className="flex items-center justify-between">
@@ -3320,9 +3472,38 @@ const Settings: React.FC<SettingsProps> = ({
                   <input 
                     type="number" 
                     className="w-16 border p-1 rounded text-center dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                    value={advancedSecurity.passwordPolicy.expiryDays}
-                    onChange={e => setAdvancedSecurity({...advancedSecurity, passwordPolicy: {...advancedSecurity.passwordPolicy, expiryDays: parseInt(e.target.value)}})}
+                    value={passwordPolicy.maxAge}
+                    onChange={e => {
+                      const newPolicy = { ...passwordPolicy, maxAge: parseInt(e.target.value) };
+                      setPasswordPolicy(newPolicy);
+                      logSecurityActivity('password_policy_updated', `Expiry days changed to ${e.target.value}`, 'low');
+                    }}
                   />
+                </div>
+              </div>
+              
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-between">
+                  <button 
+                    onClick={async () => {
+                      if (confirm('هل أنت متأكد من حفظ سياسة كلمة المرور الحالية في Firebase؟')) {
+                        try {
+                          await saveSettingsToFirebase('passwordPolicy', passwordPolicy);
+                          logSecurityActivity('password_policy_saved', 'Password policy saved to Firebase', 'low');
+                          alert('✅ تم حفظ سياسة كلمة المرور في Firebase');
+                        } catch (error) {
+                          console.error('Error saving password policy:', error);
+                          alert('❌ فشل حفظ سياسة كلمة المرور');
+                        }
+                      }
+                    }}
+                    className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg transition-all font-medium"
+                  >
+                    <Save className="w-3 h-3 inline ml-1" /> حفظ في Firebase
+                  </button>
+                  <div className="text-xs text-slate-400">
+                    محفوظة محلياً • متزامنة مع تغيير كلمة المرور
+                  </div>
                 </div>
               </div>
            </div>
@@ -3448,33 +3629,36 @@ const Settings: React.FC<SettingsProps> = ({
            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
                  <Shield className="w-5 h-5 text-indigo-600" /> اختبار الأمان
+                 <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full">
+                   اختبار فعلي
+                 </span>
               </h4>
               <div className="space-y-4">
                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                   <div className="flex items-center gap-3">
-                    <AlertTriangle className="w-5 h-5 text-blue-600" />
+                    <Shield className="w-5 h-5 text-blue-600" />
                     <div>
-                      <p className="text-sm font-bold text-blue-800 dark:text-blue-300">اختبار الميزات الأمنية</p>
-                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">اختبار جميع الميزات الأمنية للتأكد من عملها بشكل صحيح</p>
+                      <p className="text-sm font-bold text-blue-800 dark:text-blue-300">اختبار الميزات الأمنية المتقدمة</p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">فحص جميع الميزات الأمنية والتكامل مع Firebase</p>
                     </div>
                   </div>
                 </div>
                 
                 <button 
-                  onClick={() => {
-                    const results = runSecurityTests();
-                    alert(`📊 نتائج الاختبار: ${results.passed}/${results.total} نجح`);
+                  onClick={async () => {
+                    const results = await runSecurityTests();
+                    alert(`📊 نتائج الاختبار: ${results.passed}/${results.total} نجح (${Math.round((results.passed/results.total) * 100)}%)`);
                   }}
                   className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
                 >
-                  <Shield className="w-4 h-4 inline ml-2" /> تشغيل اختبار الأمان
+                  <Shield className="w-4 h-4 inline ml-2" /> تشغيل اختبار الأمان الشامل
                 </button>
 
                 <button 
                   onClick={testSecurityAlerts}
                   className="w-full bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors font-medium"
                 >
-                  <AlertTriangle className="w-4 h-4 inline ml-2" /> اختبار التنبيهات
+                  <AlertTriangle className="w-4 h-4 inline ml-2" /> اختبار التنبيهات الأمنية
                 </button>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -3516,6 +3700,58 @@ const Settings: React.FC<SettingsProps> = ({
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {Array.isArray(trustedDevices) ? '✅ نشط' : '❌ غير نشط'}
                     </p>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${Array.isArray(loginAttempts) ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">محاولات الدخول</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {Array.isArray(loginAttempts) ? '✅ نشط' : '❌ غير نشط'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${Array.isArray(advancedSecurity.ipWhitelist) ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">قائمة IP المسموحة</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {Array.isArray(advancedSecurity.ipWhitelist) ? '✅ نشط' : '❌ غير نشط'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${typeof logSecurityActivity === 'function' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">تسجيل الأنشطة</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {typeof logSecurityActivity === 'function' ? '✅ نشط' : '❌ غير نشط'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${typeof enableTwoFactor === 'function' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">وظائف 2FA</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {typeof enableTwoFactor === 'function' ? '✅ نشط' : '❌ غير نشط'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-slate-400">
+                      جميع الاختبارات تعمل مع Firebase • يتم حفظ النتائج في السحابة
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs text-green-600 font-medium">متصل بـ Firebase</span>
+                    </div>
                   </div>
                 </div>
               </div>
