@@ -125,6 +125,17 @@ export interface AppUser {
   permissions: Permission[];
   avatar?: string;
   lastLogin?: string;
+  // Security fields
+  passwordExpiry?: string;
+  passwordHistory?: string[];
+  mustChangePassword?: boolean;
+  twoFactorEnabled?: boolean;
+  twoFactorSecret?: string;
+  backupCodes?: string[];
+  trustedDevices?: TrustedDevice[];
+  failedLoginAttempts?: number;
+  lockedUntil?: string;
+  securityQuestions?: SecurityQuestion[];
 }
 
 export interface ClientDocument {
@@ -429,6 +440,7 @@ export interface LoginAttempt {
   success: boolean;
   username: string;
   userAgent: string;
+  userId?: string;
 }
 
 export interface ActiveSession {
@@ -583,6 +595,60 @@ export interface ArchiveData {
   physicalCondition: 'good' | 'fair' | 'poor';
   notes?: string;
   qrCode?: string;
+}
+
+// Security interfaces
+export interface TrustedDevice {
+  id: string;
+  deviceId: string;
+  deviceName: string;
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+  userAgent: string;
+  lastUsed: string;
+  trusted: boolean;
+  location?: string;
+  ipAddress?: string;
+}
+
+export interface SecurityQuestion {
+  id: string;
+  question: string;
+  answer: string;
+  isActive: boolean;
+}
+
+export interface SecurityActivity {
+  id: string;
+  userId: string;
+  action: 'login' | 'logout' | 'password_change' | 'permission_change' | '2fa_enabled' | '2fa_disabled' | 'account_locked' | 'account_unlocked' | 'failed_login';
+  timestamp: string;
+  ipAddress: string;
+  userAgent: string;
+  location?: string;
+  details?: string;
+  success: boolean;
+  riskLevel: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface PasswordPolicy {
+  minLength: number;
+  requireUppercase: boolean;
+  requireLowercase: boolean;
+  requireNumbers: boolean;
+  requireSpecialChars: boolean;
+  maxAge: number; // days
+  historyCount: number;
+  preventReuse: boolean;
+}
+
+export interface TwoFactorSettings {
+  enabled: boolean;
+  method: 'sms' | 'email' | 'authenticator';
+  phoneNumber?: string;
+  email?: string;
+  secret?: string;
+  backupCodes?: string[];
+  lastUsed?: string;
 }
 
 // Extend Case interface to include archive data

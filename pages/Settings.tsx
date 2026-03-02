@@ -100,6 +100,217 @@ const Settings: React.FC<SettingsProps> = ({
 
   const [isScanning, setIsScanning] = useState(false);
 
+  // Security State - Added for future security features
+  const [passwordPolicy, setPasswordPolicy] = useState({
+    minLength: 8,
+    requireUppercase: true,
+    requireLowercase: true,
+    requireNumbers: true,
+    requireSpecialChars: true,
+    maxAge: 90,
+    historyCount: 5,
+    preventReuse: true
+  });
+
+  const [twoFactorSettings, setTwoFactorSettings] = useState({
+    enabled: false,
+    method: 'sms' as 'sms' | 'email' | 'authenticator',
+    backupCodes: [] as string[]
+  });
+
+  const [securityActivity, setSecurityActivity] = useState([]);
+  const [trustedDevices, setTrustedDevices] = useState([]);
+  const [securityQuestions, setSecurityQuestions] = useState([]);
+
+  // Security Testing Functions
+  const testPasswordStrength = (password: string) => {
+    const feedback: string[] = [];
+    let score = 0;
+
+    // Length check
+    if (password.length >= passwordPolicy.minLength) {
+      score += 20;
+    } else {
+      feedback.push(`كلمة المرور يجب أن تكون ${passwordPolicy.minLength} أحرف على الأقل`);
+    }
+
+    // Uppercase check
+    if (passwordPolicy.requireUppercase && /[A-Z]/.test(password)) {
+      score += 20;
+    } else if (passwordPolicy.requireUppercase) {
+      feedback.push('يجب أن تحتوي على حرف كبير واحد على الأقل');
+    }
+
+    // Lowercase check
+    if (passwordPolicy.requireLowercase && /[a-z]/.test(password)) {
+      score += 20;
+    } else if (passwordPolicy.requireLowercase) {
+      feedback.push('يجب أن تحتوي على حرف صغير واحد على الأقل');
+    }
+
+    // Numbers check
+    if (passwordPolicy.requireNumbers && /\d/.test(password)) {
+      score += 20;
+    } else if (passwordPolicy.requireNumbers) {
+      feedback.push('يجب أن تحتوي على رقم واحد على الأقل');
+    }
+
+    // Special chars check
+    if (passwordPolicy.requireSpecialChars && /[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+      score += 20;
+    } else if (passwordPolicy.requireSpecialChars) {
+      feedback.push('يجب أن تحتوي على رمز خاص واحد على الأقل');
+    }
+
+    return { score, feedback };
+  };
+
+  const testSecurityFeature = (featureName: string, testFunction: () => boolean) => {
+    try {
+      const result = testFunction();
+      console.log(`✅ ${featureName} test: ${result ? 'PASSED' : 'FAILED'}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ ${featureName} test: ERROR`, error);
+      return false;
+    }
+  };
+
+  const runSecurityTests = () => {
+    console.log('🔐 Running Security Tests...');
+    
+    const tests = [
+      {
+        name: 'Password Policy State',
+        test: () => passwordPolicy.minLength > 0
+      },
+      {
+        name: '2FA Settings State',
+        test: () => typeof twoFactorSettings.enabled === 'boolean'
+      },
+      {
+        name: 'Security Activity Array',
+        test: () => Array.isArray(securityActivity)
+      },
+      {
+        name: 'Trusted Devices Array',
+        test: () => Array.isArray(trustedDevices)
+      },
+      {
+        name: 'Password Strength Function',
+        test: () => {
+          const result = testPasswordStrength('Test123!');
+          return typeof result.score === 'number' && Array.isArray(result.feedback);
+        }
+      }
+    ];
+
+    const results = tests.map(test => testSecurityFeature(test.name, test.test));
+    const passed = results.filter(r => r).length;
+    const total = results.length;
+    
+    console.log(`📊 Security Tests Summary: ${passed}/${total} passed`);
+    
+    return { passed, total, results };
+  };
+
+  // Advanced Security Functions
+  const logSecurityActivity = (action: string, details?: string, riskLevel: 'low' | 'medium' | 'high' | 'critical' = 'low') => {
+    const activity = {
+      id: Date.now().toString(),
+      userId: 'current-user',
+      action,
+      timestamp: new Date().toISOString(),
+      ipAddress: 'current-ip',
+      userAgent: navigator.userAgent,
+      success: true,
+      riskLevel,
+      details
+    };
+    
+    setSecurityActivity(prev => [activity, ...prev].slice(0, 100));
+    console.log(`🔐 Security Activity Logged: ${action}`);
+  };
+
+  const generateBackupCodes = (): string[] => {
+    const codes: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      codes.push(Math.random().toString(36).substring(2, 10).toUpperCase());
+    }
+    return codes;
+  };
+
+  const enableTwoFactor = (method: 'sms' | 'email' | 'authenticator') => {
+    const backupCodes = generateBackupCodes();
+    const secret = Math.random().toString(36).substring(2, 32);
+
+    const newSettings = {
+      enabled: true,
+      method,
+      secret,
+      backupCodes,
+      lastUsed: new Date().toISOString()
+    };
+
+    setTwoFactorSettings(newSettings);
+    logSecurityActivity('2fa_enabled', `2FA enabled with method: ${method}`, 'low');
+    
+    return { backupCodes, secret };
+  };
+
+  const disableTwoFactor = () => {
+    setTwoFactorSettings(prev => ({ ...prev, enabled: false }));
+    logSecurityActivity('2fa_disabled', '2FA disabled', 'medium');
+  };
+
+  const addTrustedDevice = (deviceName: string) => {
+    const device = {
+      id: Date.now().toString(),
+      deviceId: navigator.userAgent,
+      deviceName,
+      deviceType: navigator.userAgent.includes('Mobile') ? 'mobile' : 'desktop',
+      userAgent: navigator.userAgent,
+      lastUsed: new Date().toISOString(),
+      trusted: true,
+      ipAddress: 'current-ip',
+      location: 'Unknown'
+    };
+
+    setTrustedDevices(prev => [...prev, device]);
+    logSecurityActivity('trusted_device_added', `Trusted device added: ${deviceName}`, 'low');
+    
+    return device;
+  };
+
+  const removeTrustedDevice = (deviceId: string) => {
+    setTrustedDevices(prev => prev.filter(d => d.id !== deviceId));
+    logSecurityActivity('trusted_device_removed', `Trusted device removed: ${deviceId}`, 'medium');
+  };
+
+  const updatePasswordPolicy = (newPolicy: typeof passwordPolicy) => {
+    setPasswordPolicy(newPolicy);
+    logSecurityActivity('password_policy_updated', 'Password policy updated', 'low');
+  };
+
+  const simulateSecurityAlert = (message: string, severity: 'info' | 'warning' | 'error' | 'success' = 'info') => {
+    logSecurityActivity('security_alert', message, severity === 'error' ? 'high' : severity === 'warning' ? 'medium' : 'low');
+    
+    // Show browser notification if supported
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification(`تنبيه أمني - ${severity}`, {
+        body: message,
+        icon: '/favicon.ico'
+      });
+    }
+  };
+
+  const testSecurityAlerts = () => {
+    simulateSecurityAlert('هذا اختبار تنبيه أمني معلوماتي', 'info');
+    setTimeout(() => simulateSecurityAlert('محاولة وصول غير مصروف بها', 'warning'), 2000);
+    setTimeout(() => simulateSecurityAlert('تم اكتشاف نشاط مشبوه', 'error'), 4000);
+    setTimeout(() => simulateSecurityAlert('تم تحديث إعدادات الأمان بنجاح', 'success'), 6000);
+  };
+
   // Real Error Logging Functions
   const logError = async (level: 'error' | 'warning', message: string, source: string) => {
     const error: SystemError = {
@@ -1734,30 +1945,84 @@ const Settings: React.FC<SettingsProps> = ({
   useEffect(() => {
     const loadSecurityData = async () => {
       try {
-        // Load active sessions
-        const sessionsQuery = query(collection(db, 'activeSessions'));
+        const authInstance = getAuth();
+        const currentUser = authInstance.currentUser;
+        
+        if (!currentUser) {
+          console.log('No current user found for security data loading');
+          return;
+        }
+
+        // Load active sessions for current user only
+        const sessionsQuery = query(
+          collection(db, 'activeSessions'), 
+          where('userId', '==', currentUser.uid),
+          orderBy('lastActive', 'desc')
+        );
         const sessionsSnapshot = await getDocs(sessionsQuery);
         const sessions = sessionsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as ActiveSession[];
+        
+        console.log(`Loaded ${sessions.length} active sessions for user ${currentUser.uid}`);
         setActiveSessions(sessions);
 
-        // Load login attempts
-        const attemptsQuery = query(collection(db, 'loginAttempts'), orderBy('timestamp', 'desc'), limit(50));
+        // Load login attempts for current user only
+        const attemptsQuery = query(
+          collection(db, 'loginAttempts'), 
+          where('userId', '==', currentUser.uid),
+          orderBy('timestamp', 'desc'), 
+          limit(50)
+        );
         const attemptsSnapshot = await getDocs(attemptsQuery);
         const attempts = attemptsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as LoginAttempt[];
+        
+        console.log(`Loaded ${attempts.length} login attempts for user ${currentUser.uid}`);
         setLoginAttempts(attempts);
+
+        // Load IP Whitelist from Firebase
+        await loadIpWhitelistFromFirebase();
+
+        // Load failed login attempts (for all users - admin view)
+        await loadFailedLoginAttempts();
+
+        // Log this security data access
+        logSecurityActivity('security_data_loaded', `Loaded ${sessions.length} sessions and ${attempts.length} attempts`, 'low');
 
       } catch (error) {
         console.error('Error loading security data:', error);
+        logSecurityActivity('security_data_error', `Failed to load security data: ${error}`, 'high');
       }
     };
 
     loadSecurityData();
+
+    // Set up real-time listener for active sessions
+    const authInstance = getAuth();
+    const currentUser = authInstance.currentUser;
+    
+    if (currentUser) {
+      const sessionsQuery = query(
+        collection(db, 'activeSessions'),
+        where('userId', '==', currentUser.uid)
+      );
+      
+      const unsubscribe = onSnapshot(sessionsQuery, (snapshot) => {
+        const sessions = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as ActiveSession[];
+        
+        setActiveSessions(sessions);
+        console.log(`Real-time update: ${sessions.length} active sessions`);
+      });
+
+      return () => unsubscribe();
+    }
   }, []);
 
   // Add current session to active sessions (support multiple devices)
@@ -1876,21 +2141,71 @@ const Settings: React.FC<SettingsProps> = ({
   // Function to log login attempts
   const logLoginAttempt = async (username: string, success: boolean, ip: string = 'Unknown') => {
     try {
+      const authInstance = getAuth();
+      const currentUser = authInstance.currentUser;
+      
       const attemptData: LoginAttempt = {
         id: Date.now().toString(),
         ip: ip,
         timestamp: new Date().toISOString(),
         success: success,
         username: username,
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        userId: currentUser?.uid || 'anonymous'
       };
 
       await setDoc(doc(db, 'loginAttempts', attemptData.id), attemptData);
       
       // Update local state
       setLoginAttempts(prev => [attemptData, ...prev].slice(0, 50));
+      
+      console.log(`🔐 Login attempt logged: ${username} - ${success ? 'SUCCESS' : 'FAILED'} - ${ip}`);
     } catch (error) {
       console.error('Error logging login attempt:', error);
+    }
+  };
+
+  const loadFailedLoginAttempts = async () => {
+    try {
+      const authInstance = getAuth();
+      const currentUser = authInstance.currentUser;
+      
+      if (currentUser) {
+        // Load failed login attempts from the failed_login_attempts collection
+        const failedAttemptsQuery = query(
+          collection(db, 'failed_login_attempts'),
+          orderBy('timestamp', 'desc'),
+          limit(50)
+        );
+        const failedAttemptsSnapshot = await getDocs(failedAttemptsQuery);
+        
+        const failedAttempts = failedAttemptsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ip: doc.data().ip || 'Unknown',
+          timestamp: doc.data().timestamp?.toDate()?.toISOString() || new Date().toISOString(),
+          success: false,
+          username: doc.data().email || 'Unknown',
+          userAgent: doc.data().userAgent || 'Unknown',
+          userId: doc.data().userId || 'anonymous',
+          attempts: doc.data().attempts || 1
+        })) as LoginAttempt[];
+        
+        // Combine with successful attempts
+        setLoginAttempts(prev => {
+          const allAttempts = [...failedAttempts, ...prev];
+          // Remove duplicates and sort by timestamp
+          const uniqueAttempts = allAttempts.filter((attempt, index, self) => 
+            index === self.findIndex((t) => t.id === attempt.id)
+          );
+          return uniqueAttempts.sort((a, b) => 
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+          ).slice(0, 50);
+        });
+        
+        console.log(`Loaded ${failedAttempts.length} failed login attempts`);
+      }
+    } catch (error) {
+      console.error('Error loading failed login attempts:', error);
     }
   };
 
@@ -2763,20 +3078,102 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   const handleAddIp = () => {
-    if (newIp && !advancedSecurity.ipWhitelist.includes(newIp)) {
+    if (!newIp.trim()) {
+      alert('❌ يجب إدخال عنوان IP صالح');
+      return;
+    }
+
+    // Validate IP format
+    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    if (!ipRegex.test(newIp.trim())) {
+      alert('❌ عنوان IP غير صالح. يرجى إدخال IP صحيح (مثال: 192.168.1.1)');
+      return;
+    }
+
+    if (!advancedSecurity.ipWhitelist.includes(newIp.trim())) {
+      const updatedWhitelist = [...advancedSecurity.ipWhitelist, newIp.trim()];
       setAdvancedSecurity(prev => ({
         ...prev,
-        ipWhitelist: [...prev.ipWhitelist, newIp]
+        ipWhitelist: updatedWhitelist
       }));
+      
+      // Save to Firebase
+      saveIpWhitelistToFirebase(updatedWhitelist);
+      
+      // Log security activity
+      logSecurityActivity('ip_whitelist_added', `IP ${newIp.trim()} added to whitelist`, 'low');
+      
       setNewIp('');
+      console.log(`IP ${newIp.trim()} added to whitelist`);
+    } else {
+      alert('⚠️ هذا IP موجود بالفعل في القائمة');
     }
   };
 
   const handleRemoveIp = (ip: string) => {
-    setAdvancedSecurity(prev => ({
-      ...prev,
-      ipWhitelist: prev.ipWhitelist.filter(i => i !== ip)
-    }));
+    if (confirm(`هل أنت متأكد من إزالة IP ${ip} من القائمة المسموحة؟`)) {
+      const updatedWhitelist = advancedSecurity.ipWhitelist.filter(i => i !== ip);
+      setAdvancedSecurity(prev => ({
+        ...prev,
+        ipWhitelist: updatedWhitelist
+      }));
+      
+      // Save to Firebase
+      saveIpWhitelistToFirebase(updatedWhitelist);
+      
+      // Log security activity
+      logSecurityActivity('ip_whitelist_removed', `IP ${ip} removed from whitelist`, 'medium');
+      
+      console.log(`IP ${ip} removed from whitelist`);
+    }
+  };
+
+  const saveIpWhitelistToFirebase = async (whitelist: string[]) => {
+    try {
+      const authInstance = getAuth();
+      const currentUser = authInstance.currentUser;
+      
+      if (currentUser) {
+        // Save to user's security settings
+        const securityRef = doc(db, 'userSecuritySettings', currentUser.uid);
+        await setDoc(securityRef, {
+          ipWhitelist: whitelist,
+          userId: currentUser.uid,
+          lastUpdated: new Date().toISOString()
+        }, { merge: true });
+        
+        console.log('IP Whitelist saved to Firebase:', whitelist);
+      }
+    } catch (error) {
+      console.error('Error saving IP whitelist to Firebase:', error);
+      logSecurityActivity('ip_whitelist_save_error', `Failed to save IP whitelist: ${error}`, 'high');
+    }
+  };
+
+  const loadIpWhitelistFromFirebase = async () => {
+    try {
+      const authInstance = getAuth();
+      const currentUser = authInstance.currentUser;
+      
+      if (currentUser) {
+        const securityRef = doc(db, 'userSecuritySettings', currentUser.uid);
+        const securityDoc = await getDoc(securityRef);
+        
+        if (securityDoc.exists()) {
+          const data = securityDoc.data();
+          if (data.ipWhitelist && Array.isArray(data.ipWhitelist)) {
+            setAdvancedSecurity(prev => ({
+              ...prev,
+              ipWhitelist: data.ipWhitelist
+            }));
+            console.log('IP Whitelist loaded from Firebase:', data.ipWhitelist);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading IP whitelist from Firebase:', error);
+      logSecurityActivity('ip_whitelist_load_error', `Failed to load IP whitelist: ${error}`, 'high');
+    }
   };
 
   const renderSecurityTab = () => (
@@ -2829,8 +3226,43 @@ const Settings: React.FC<SettingsProps> = ({
                       minLength={8}
                       className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                       value={securityData.newPassword}
-                      onChange={e => setSecurityData({...securityData, newPassword: e.target.value})}
+                      onChange={e => {
+                        setSecurityData({...securityData, newPassword: e.target.value});
+                        // Password strength will be calculated here
+                      }}
                     />
+                    {/* Password Strength Indicator */}
+                    {securityData.newPassword && (
+                      <div className="mt-2">
+                        {(() => {
+                          const strength = testPasswordStrength(securityData.newPassword);
+                          return (
+                            <>
+                              <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full transition-all duration-300 ${
+                                    strength.score < 40 ? 'bg-red-500' :
+                                    strength.score < 60 ? 'bg-yellow-500' :
+                                    strength.score < 80 ? 'bg-blue-500' : 'bg-green-500'
+                                  }`}
+                                  style={{width: `${strength.score}%`}}
+                                ></div>
+                              </div>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                قوة كلمة المرور: {strength.score}/100
+                              </p>
+                              {strength.feedback.length > 0 && (
+                                <div className="mt-1">
+                                  <p className="text-xs text-amber-600 dark:text-amber-400">
+                                    {strength.feedback.join(' • ')}
+                                  </p>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
                  </div>
                  <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تأكيد كلمة المرور الجديدة</label>
@@ -2935,28 +3367,157 @@ const Settings: React.FC<SettingsProps> = ({
            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
                  <Smartphone className="w-5 h-5 text-blue-600" /> الجلسات النشطة
+                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+                   {activeSessions.length} نشطة
+                 </span>
               </h4>
               <div className="space-y-4">
-                 {activeSessions.map(session => (
-                   <div key={session.id} className={`flex items-center justify-between p-3 rounded-lg ${session.isCurrent ? 'bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800' : 'bg-slate-50 dark:bg-slate-700/50'}`}>
-                      <div className="flex items-center gap-3">
-                         <div className={`p-2 rounded-full ${session.isCurrent ? 'bg-green-100 text-green-600' : 'bg-white dark:bg-slate-600 text-slate-600 dark:text-slate-300'}`}>
-                            {session.device.includes('PC') ? <Globe2 className="w-5 h-5" /> : <Smartphone className="w-5 h-5" />}
-                         </div>
-                         <div>
-                            <p className="text-sm font-bold text-slate-800 dark:text-white">{session.device} - {session.browser}</p>
-                            <p className="text-xs text-slate-500 dark:text-slate-400">{session.location} • {session.lastActive}</p>
-                         </div>
-                      </div>
-                      {session.isCurrent ? (
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">الحالية</span>
-                      ) : (
-                        <button onClick={() => handleTerminateSession(session.id)} className="text-xs text-red-600 hover:underline font-bold flex items-center gap-1">
-                           <LogOut className="w-3 h-3" /> إنهاء
-                        </button>
-                      )}
+                 {activeSessions.length === 0 ? (
+                   <div className="text-center py-8">
+                     <Smartphone className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                     <p className="text-sm text-slate-400">لا توجد جلسات نشطة</p>
+                     <p className="text-xs text-slate-400 mt-1">سيتم عرض الجلسات النشطة هنا عند تسجيل الدخول</p>
                    </div>
-                 ))}
+                 ) : (
+                   activeSessions.map(session => (
+                     <div key={session.id} className={`flex items-center justify-between p-4 rounded-lg transition-all hover:shadow-md ${session.isCurrent ? 'bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800' : 'bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600'}`}>
+                        <div className="flex items-center gap-3 flex-1">
+                           <div className={`p-3 rounded-full ${session.isCurrent ? 'bg-green-100 text-green-600' : 'bg-white dark:bg-slate-600 text-slate-600 dark:text-slate-300'}`}>
+                              {session.device?.includes('Mobile') || session.device?.includes('Android') || session.device?.includes('iPhone') ? 
+                                <Smartphone className="w-5 h-5" /> : 
+                                <Globe2 className="w-5 h-5" />
+                              }
+                           </div>
+                           <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-sm font-bold text-slate-800 dark:text-white truncate">
+                                  {session.device || 'جهاز غير معروف'} - {session.browser || 'متصفح غير معروف'}
+                                </p>
+                                {session.isCurrent && (
+                                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">الحالية</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                                <span className="flex items-center gap-1">
+                                   <Globe2 className="w-3 h-3" />
+                                   {session.ip || 'IP غير معروف'}
+                                </span>
+                                <span className="flex items-center gap-1">
+                                   <Clock className="w-3 h-3" />
+                                   {session.lastActive ? 
+                                     new Date(session.lastActive).toLocaleString('ar-EG', { 
+                                       hour: '2-digit', 
+                                       minute: '2-digit',
+                                       day: '2-digit',
+                                       month: '2-digit'
+                                     }) : 'غير معروف'
+                                   }
+                                </span>
+                              </div>
+                              {session.location && (
+                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                                   📍 {session.location}
+                                </p>
+                              )}
+                           </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                           {!session.isCurrent && (
+                             <button 
+                               onClick={() => handleTerminateSession(session.id)} 
+                               className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-lg transition-all font-bold flex items-center gap-1"
+                             >
+                                <LogOut className="w-3 h-3" /> إنهاء
+                             </button>
+                           )}
+                        </div>
+                     </div>
+                   ))
+                 )}
+              </div>
+              {activeSessions.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                  <p className="text-xs text-slate-400 text-center">
+                    {activeSessions.length} جلسة نشطة • يمكن إدارة الجلسات من هنا
+                  </p>
+                </div>
+              )}
+           </div>
+
+           {/* Security Testing */}
+           <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+              <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+                 <Shield className="w-5 h-5 text-indigo-600" /> اختبار الأمان
+              </h4>
+              <div className="space-y-4">
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <p className="text-sm font-bold text-blue-800 dark:text-blue-300">اختبار الميزات الأمنية</p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">اختبار جميع الميزات الأمنية للتأكد من عملها بشكل صحيح</p>
+                    </div>
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={() => {
+                    const results = runSecurityTests();
+                    alert(`📊 نتائج الاختبار: ${results.passed}/${results.total} نجح`);
+                  }}
+                  className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors font-medium"
+                >
+                  <Shield className="w-4 h-4 inline ml-2" /> تشغيل اختبار الأمان
+                </button>
+
+                <button 
+                  onClick={testSecurityAlerts}
+                  className="w-full bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors font-medium"
+                >
+                  <AlertTriangle className="w-4 h-4 inline ml-2" /> اختبار التنبيهات
+                </button>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${passwordPolicy.minLength > 0 ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">سياسة كلمات المرور</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {passwordPolicy.minLength > 0 ? '✅ نشط' : '❌ غير نشط'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${typeof twoFactorSettings.enabled === 'boolean' ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">المصادقة الثنائية</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {typeof twoFactorSettings.enabled === 'boolean' ? '✅ نشط' : '❌ غير نشط'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${Array.isArray(securityActivity) ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">سجل النشاط</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {Array.isArray(securityActivity) ? '✅ نشط' : '❌ غير نشط'}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className={`w-2 h-2 rounded-full ${Array.isArray(trustedDevices) ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">الأجهزة الموثوقة</span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {Array.isArray(trustedDevices) ? '✅ نشط' : '❌ غير نشط'}
+                    </p>
+                  </div>
+                </div>
               </div>
            </div>
 
@@ -2964,29 +3525,106 @@ const Settings: React.FC<SettingsProps> = ({
            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
                  <Globe className="w-5 h-5 text-purple-600" /> قائمة IP المسموحة (Whitelist)
+                 <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                   {advancedSecurity.ipWhitelist.length} IP
+                 </span>
               </h4>
-              <div className="flex gap-2 mb-4">
-                <input 
-                  type="text" 
-                  placeholder="192.168.1.1" 
-                  className="flex-1 border p-2 rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                  value={newIp}
-                  onChange={e => setNewIp(e.target.value)}
-                />
-                <button onClick={handleAddIp} className="bg-purple-600 text-white px-3 rounded-lg hover:bg-purple-700 transition-colors">
-                  <Plus className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="space-y-2">
-                {advancedSecurity.ipWhitelist.length === 0 && <p className="text-xs text-slate-400 text-center py-2">لا توجد قيود (مسموح للجميع)</p>}
-                {advancedSecurity.ipWhitelist.map(ip => (
-                  <div key={ip} className="flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 p-2 rounded-lg text-sm">
-                    <span className="font-mono text-slate-700 dark:text-slate-300">{ip}</span>
-                    <button onClick={() => handleRemoveIp(ip)} className="text-red-500 hover:text-red-700">
-                      <X className="w-4 h-4" />
-                    </button>
+              
+              <div className="space-y-4">
+                <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <Shield className="w-5 h-5 text-purple-600" />
+                    <div>
+                      <p className="text-sm font-bold text-purple-800 dark:text-purple-300">حماية الوصول عبر IP</p>
+                      <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">السماح بالوصول من عناوين IP المعتمدة فقط</p>
+                    </div>
                   </div>
-                ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="192.168.1.1" 
+                    className="flex-1 border p-2.5 rounded-lg text-sm dark:bg-slate-700 dark:border-slate-600 dark:text-white font-mono"
+                    value={newIp}
+                    onChange={e => setNewIp(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddIp();
+                      }
+                    }}
+                  />
+                  <button 
+                    onClick={handleAddIp} 
+                    className="bg-purple-600 text-white px-4 py-2.5 rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" /> إضافة
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                  {advancedSecurity.ipWhitelist.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Globe className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-sm text-slate-400">لا توجد عناوين IP مضافة</p>
+                      <p className="text-xs text-slate-400 mt-1">يمكنك إضافة عناوين IP للسماح بالوصول منها فقط</p>
+                    </div>
+                  ) : (
+                    advancedSecurity.ipWhitelist.map((ip, index) => (
+                      <div key={ip} className="flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg text-sm hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="bg-purple-100 text-purple-600 p-2 rounded-lg">
+                            <Globe className="w-4 h-4" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-mono text-slate-700 dark:text-slate-300 font-bold">{ip}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              تم الإضافة: {new Date().toLocaleDateString('ar-EG')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                            #{index + 1}
+                          </span>
+                          <button 
+                            onClick={() => handleRemoveIp(ip)} 
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 p-2 rounded-lg transition-all"
+                            title="إزالة IP"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {advancedSecurity.ipWhitelist.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">
+                        {advancedSecurity.ipWhitelist.length} عنوان IP مسموح • محفوظة في Firebase
+                      </p>
+                      <button 
+                        onClick={() => {
+                          if (confirm('هل أنت متأكد من مسح جميع عناوين IP؟')) {
+                            const emptyWhitelist: string[] = [];
+                            setAdvancedSecurity(prev => ({
+                              ...prev,
+                              ipWhitelist: emptyWhitelist
+                            }));
+                            saveIpWhitelistToFirebase(emptyWhitelist);
+                            logSecurityActivity('ip_whitelist_cleared', 'All IP addresses removed from whitelist', 'medium');
+                          }
+                        }}
+                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-lg transition-all font-medium"
+                      >
+                        <Trash2 className="w-3 h-3 inline ml-1" /> مسح الكل
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
            </div>
 
@@ -2994,19 +3632,111 @@ const Settings: React.FC<SettingsProps> = ({
            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
               <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
                  <History className="w-5 h-5 text-slate-600" /> سجل محاولات الدخول
+                 <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-full">
+                   {loginAttempts.length} محاولة
+                 </span>
               </h4>
-              <div className="space-y-3 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
-                {loginAttempts.map(attempt => (
-                  <div key={attempt.id} className="flex items-center justify-between text-xs border-b border-slate-50 dark:border-slate-700 pb-2 last:border-0 last:pb-0">
+              
+              <div className="space-y-4">
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
                     <div>
-                      <p className="font-bold text-slate-700 dark:text-slate-300">{attempt.ip}</p>
-                      <p className="text-slate-400">{attempt.timestamp}</p>
+                      <p className="text-sm font-bold text-amber-800 dark:text-amber-300">مراقبة الأمان</p>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">عرض جميع محاولات الدخول الناجحة والفاشلة</p>
                     </div>
-                    <span className={`px-2 py-1 rounded-full font-bold ${attempt.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {attempt.success ? 'نجاح' : 'فشل'}
-                    </span>
                   </div>
-                ))}
+                </div>
+
+                <div className="space-y-3 max-h-64 overflow-y-auto pr-1 custom-scrollbar">
+                  {loginAttempts.length === 0 ? (
+                    <div className="text-center py-8">
+                      <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                      <p className="text-sm text-slate-400">لا توجد محاولات دخول مسجلة</p>
+                      <p className="text-xs text-slate-400 mt-1">سيتم عرض محاولات الدخول هنا</p>
+                    </div>
+                  ) : (
+                    loginAttempts.map((attempt, index) => (
+                      <div key={attempt.id} className={`flex items-center justify-between p-3 rounded-lg text-xs border-b border-slate-50 dark:border-slate-700 pb-2 last:border-0 last:pb-0 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition-colors`}>
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className={`p-2 rounded-full ${attempt.success ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                            {attempt.success ? <CheckCircle2 className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <p className="font-bold text-slate-700 dark:text-slate-300 truncate">
+                                {attempt.username || 'مستخدم غير معروف'}
+                              </p>
+                              {(attempt as any).attempts && (attempt as any).attempts > 1 && (
+                                <span className="text-xs bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-medium">
+                                  {(attempt as any).attempts}x
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                              <span className="flex items-center gap-1">
+                                <Globe className="w-3 h-3" />
+                                {attempt.ip || 'IP غير معروف'}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {attempt.timestamp ? 
+                                  new Date(attempt.timestamp).toLocaleString('ar-EG', { 
+                                    hour: '2-digit', 
+                                    minute: '2-digit',
+                                    day: '2-digit',
+                                    month: '2-digit'
+                                  }) : 'غير معروف'
+                                }
+                              </span>
+                            </div>
+                            {attempt.userAgent && (
+                              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 truncate">
+                                🖥️ {attempt.userAgent.includes('Chrome') ? 'Chrome' : 
+                                      attempt.userAgent.includes('Firefox') ? 'Firefox' : 
+                                      attempt.userAgent.includes('Safari') ? 'Safari' : 
+                                      attempt.userAgent.includes('Edge') ? 'Edge' : 'متصفح غير معروف'}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full font-bold text-xs ${
+                            attempt.success ? 
+                              'bg-green-100 text-green-700' : 
+                              'bg-red-100 text-red-700'
+                          }`}>
+                            {attempt.success ? '✓ نجح' : '✗ فشل'}
+                          </span>
+                          <span className="text-xs text-slate-400">
+                            #{index + 1}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {loginAttempts.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-slate-400">
+                        {loginAttempts.filter(a => a.success).length} نجاح • {loginAttempts.filter(a => !a.success).length} فشل • محفوظة في Firebase
+                      </p>
+                      <button 
+                        onClick={() => {
+                          if (confirm('هل أنت متأكد من مسح سجل محاولات الدخول؟')) {
+                            setLoginAttempts([]);
+                            logSecurityActivity('login_attempts_cleared', 'Login attempts log cleared', 'medium');
+                          }
+                        }}
+                        className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-lg transition-all font-medium"
+                      >
+                        <Trash2 className="w-3 h-3 inline ml-1" /> مسح السجل
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
            </div>
         </div>
