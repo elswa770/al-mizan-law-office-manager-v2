@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Settings collections - allow read/write to authenticated users
+    match /generalSettings/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /securitySettings/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /notificationSettings/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /dataManagementSettings/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    match /maintenanceSettings/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Cases collection - allow read/write to authenticated users
+    match /cases/{caseId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Archived cases collection - allow read/write to authenticated users
+    match /archived_cases/{caseId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Users collection - allow read/write to authenticated users
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Connection test collection - allow authenticated users
+    match /connection-test/{document} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Deny all other reads/writes
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Logo folder - allow authenticated users to upload/download
+    match /logo/{filename} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Backups folder - allow authenticated users to upload/download
+    match /backups/{filename} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Deny all other storage access
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

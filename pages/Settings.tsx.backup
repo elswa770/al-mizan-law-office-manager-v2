@@ -1,0 +1,2584 @@
+
+import React, { useState, useRef, useEffect } from 'react';
+import { AppUser, PermissionLevel, Case, Client, Hearing, Task, LegalReference } from '../types';
+import { 
+  Settings as SettingsIcon, Users, Lock, Shield, 
+  Plus, Edit3, Trash2, Check, X, Eye, 
+  Save, AlertCircle, Ban, Pencil, Key,
+  Building, Phone, Mail, Globe, Upload, FileText, 
+  Bell, Moon, Sun, Database, Download, Cloud, Loader2, FileJson, History, HardDrive, RotateCcw,
+  Smartphone, LogOut, Archive, Clock, Printer, FileText as FileReport
+} from 'lucide-react';
+import { 
+  updatePassword as updateFirebasePassword,
+  getAuth,
+  signOut as firebaseSignOut
+} from 'firebase/auth';
+import { auth } from '../services/firebaseConfig';
+import { doc, setDoc, getDoc, updateDoc, collection, getDocs, deleteDoc } from 'firebase/firestore';
+import { db } from '../services/firebaseConfig';
+
+interface SettingsProps {
+  users?: AppUser[];
+  onAddUser?: (user: AppUser) => void;
+  onUpdateUser?: (user: AppUser) => void;
+  onDeleteUser?: (userId: string) => void;
+  currentTheme?: 'light' | 'dark';
+  onThemeChange?: (theme: 'light' | 'dark') => void;
+  // Data props for backup
+  cases?: Case[];
+  clients?: Client[];
+  hearings?: Hearing[];
+  tasks?: Task[];
+  references?: LegalReference[];
+  onRestoreData?: (data: any) => void; 
+  readOnly?: boolean;
+}
+
+// Complete list of modules for permission assignment
+const MODULES = [
+  { id: 'dashboard', label: 'لوحة التحكم' },
+  { id: 'cases', label: 'إدارة القضايا' },
+  { id: 'clients', label: 'إدارة الموكلين' },
+  { id: 'hearings', label: 'الجلسات والمواعيد' },
+  { id: 'tasks', label: 'إدارة المهام' }, 
+  { id: 'documents', label: 'الأرشيف والمستندات' },
+  { id: 'generator', label: 'منشئ العقود' }, // Added
+  { id: 'fees', label: 'الحسابات (الإيرادات)' },
+  { id: 'expenses', label: 'المصروفات الإدارية' },
+  { id: 'reports', label: 'التقارير' },
+  { id: 'references', label: 'المراجع القانونية' }, 
+  { id: 'ai-assistant', label: 'المساعد الذكي' },
+  { id: 'locations', label: 'دليل المحاكم' }, // Added
+  { id: 'calculators', label: 'الحاسبات القانونية' }, // Added
+  { id: 'settings', label: 'الإعدادات والمستخدمين' },
+];
+
+const Settings: React.FC<SettingsProps> = ({ 
+  users = [], onAddUser, onUpdateUser, onDeleteUser, currentTheme = 'light', onThemeChange,
+  cases = [], clients = [], hearings = [], tasks = [], references = [],
+  onRestoreData, readOnly = false
+}) => {
+  const [activeTab, setActiveTab] = useState<'general' | 'users' | 'security' | 'dataManagement' | 'reports'>('general');
+  const [isSaving, setIsSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  
+  // Backup State
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [lastBackupDate, setLastBackupDate] = useState<string | null>(localStorage.getItem('app_last_backup_date'));
+  // Data Management State
+  const [archiveDate, setArchiveDate] = useState('');
+  const [autoBackupFrequency, setAutoBackupFrequency] = useState('weekly');
+  const [restorePoint, setRestorePoint] = useState('');
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [archivedCases, setArchivedCases] = useState<any[]>([]);
+  const [backupPoints, setBackupPoints] = useState<any[]>([]);
+  const [autoBackupSettings, setAutoBackupSettings] = useState<any>(null);
+  // Reports State
+  const [reportSettings, setReportSettings] = useState({
+    includeArchived: false,
+    dateRange: 'all',
+    format: 'pdf',
+    autoPrint: false
+  });
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
+  const exportFileRef = useRef<HTMLInputElement>(null);
+  const restoreFileRef = useRef<HTMLInputElement>(null);
+  
+  // Generate Report Handler
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      console.log('🔄 Generating report with settings:', reportSettings);
+      
+      // Filter data based on settings
+      let filteredCases = [...cases];
+      if (!reportSettings.includeArchived) {
+        filteredCases = filteredCases.filter(c => c.status !== 'مؤرشفة');
+      }
+      
+      if (reportSettings.dateRange !== 'all') {
+        const now = new Date();
+        let cutoffDate = new Date();
+        
+        switch (reportSettings.dateRange) {
+          case 'month':
+            cutoffDate.setMonth(now.getMonth() - 1);
+            break;
+          case 'quarter':
+            cutoffDate.setMonth(now.getMonth() - 3);
+            break;
+          case 'year':
+            cutoffDate.setFullYear(now.getFullYear() - 1);
+            break;
+        }
+        
+        filteredCases = filteredCases.filter(c => {
+          const caseDate = c.startDate ? new Date(c.startDate) : new Date(c.year, 0, 1);
+          return caseDate >= cutoffDate;
+        });
+      }
+      
+      // Generate report content
+      const reportData = {
+        title: 'تقرير القضايا',
+        generatedAt: new Date().toLocaleString('ar-SA'),
+        settings: reportSettings,
+        summary: {
+          totalCases: filteredCases.length,
+          openCases: filteredCases.filter(c => c.status === 'مفتوحة').length,
+          closedCases: filteredCases.filter(c => c.status === 'مغلقة').length,
+          archivedCases: archivedCases.length
+        },
+        cases: filteredCases.map(c => ({
+          number: c.caseNumber,
+          title: c.title,
+          client: c.clientName,
+          status: c.status,
+          court: c.court,
+          year: c.year,
+          startDate: c.startDate
+        }))
+      };
+      
+      // Generate and download report
+      if (reportSettings.format === 'pdf') {
+        // For now, generate JSON (can be enhanced with PDF library)
+        const jsonString = JSON.stringify(reportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `تقرير_القضايا_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        // CSV format
+        const csvContent = convertToCSV({ cases: filteredCases });
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `تقرير_القضايا_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+      
+      alert(`✅ تم إنشاء التقرير بنجاح (${filteredCases.length} قضية)`);
+    } catch (error) {
+      console.error('Report generation error:', error);
+      alert('❌ حدث خطأ أثناء إنشاء التقرير');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const handlePrintReport = () => {
+    if (reportRef.current) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html dir="rtl">
+            <head>
+              <title>تقرير القضايا</title>
+              <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+                th { background-color: #f2f2f2; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .summary { margin-bottom: 20px; }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <h1>تقرير القضايا</h1>
+                <p>تاريخ الإنشاء: ${new Date().toLocaleString('ar-SA')}</p>
+              </div>
+              ${reportRef.current.innerHTML}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    }
+  };
+  
+  // Security State
+  const [securityData, setSecurityData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+    twoFactorEnabled: false
+  });
+
+  // User Modal State
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+  
+  // User Form State
+  const [formData, setFormData] = useState<Partial<AppUser>>({
+    name: '',
+    email: '',
+    username: '',
+    password: '',
+    roleLabel: '',
+    isActive: true,
+    permissions: []
+  });
+
+  // --- General Settings State with Firebase Persistence ---
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  
+  // Initialize state from Firebase or LocalStorage or Defaults
+  const [generalSettings, setGeneralSettings] = useState({
+    firmName: 'الميزان للمحاماة والاستشارات القانونية',
+    firmSlogan: 'العدالة حق للجميع',
+    taxNumber: '123-456-789',
+    address: '15 شارع جامعة الدول العربية، المهندسين، الجيزة',
+    phone: '01000000000',
+    email: 'info@almizan.com',
+    website: 'www.almizan-law.com',
+    currency: 'EGP',
+    language: 'ar',
+    theme: currentTheme,
+    enableEmailNotifications: true,
+    enableSystemNotifications: true,
+    autoBackup: 'weekly',
+    logoPreview: null as string | null
+  });
+
+  // Load settings from Firebase on component mount
+  useEffect(() => {
+    const loadWithTimeout = async () => {
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Connection timeout')), 10000)
+        );
+        
+        await Promise.race([loadSettingsFromFirebase(), timeoutPromise]);
+      } catch (error) {
+        console.warn('Firebase connection timeout or error:', error);
+        setLoading(false);
+      }
+    };
+    
+    loadWithTimeout();
+  }, []);
+
+  // Load data management data on component mount and tab change
+  useEffect(() => {
+    if (activeTab === 'dataManagement') {
+      const loadDataWithTimeout = async () => {
+        try {
+          console.log('🔄 Starting data management load with extended timeout...');
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Connection timeout')), 20000)
+          );
+          
+          await Promise.race([loadDataManagementData(), timeoutPromise]);
+          console.log('✅ Data management load completed successfully');
+        } catch (error) {
+          console.warn('⚠️ Data management loading timeout or error:', error);
+          // Don't set empty arrays on timeout, keep existing data
+          // This allows manual retry to work
+        }
+      };
+      
+      loadDataWithTimeout();
+    }
+  }, [activeTab]);
+
+  const loadSettingsFromFirebase = async () => {
+    try {
+      setLoading(true);
+      
+      // Load general settings with timeout
+      const generalDocPromise = getDoc(doc(db, 'settings', 'general'));
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Settings load timeout')), 5000)
+      );
+      
+      const generalDoc = await Promise.race([generalDocPromise, timeoutPromise]);
+      if (generalDoc && (generalDoc as any).exists()) {
+        const data = (generalDoc as any).data() as any;
+        setGeneralSettings(prev => ({ ...prev, ...data }));
+      }
+      
+      // Load backup info with timeout
+      const backupDocPromise = getDoc(doc(db, 'settings', 'backup'));
+      const backupTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Backup info load timeout')), 3000)
+      );
+      
+      const backupDoc = await Promise.race([backupDocPromise, backupTimeoutPromise]);
+      if (backupDoc && (backupDoc as any).exists()) {
+        const data = (backupDoc as any).data() as any;
+        setLastBackupDate(data.lastBackupDate || null);
+      }
+      
+      // Check localStorage as fallback
+      const localBackup = localStorage.getItem('app_last_backup_date');
+      if (localBackup && !lastBackupDate) {
+        setLastBackupDate(localBackup);
+      }
+      
+    } catch (error) {
+      console.warn('Error loading settings from Firebase:', error);
+      // Fallback to localStorage
+      const localSettings = localStorage.getItem('app_general_settings');
+      if (localSettings) {
+        try {
+          setGeneralSettings(JSON.parse(localSettings));
+        } catch (e) {
+          console.warn('Error parsing local settings:', e);
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveSettingsToFirebase = async () => {
+    if (readOnly) return;
+    
+    setIsSaving(true);
+    try {
+      // Save general settings
+      await setDoc(doc(db, 'settings', 'general'), generalSettings);
+      
+      // Save backup info
+      if (lastBackupDate) {
+        await setDoc(doc(db, 'settings', 'backup'), { lastBackupDate });
+      }
+      
+      alert('✅ تم حفظ الإعدادات بنجاح');
+    } catch (error) {
+      console.error('Error saving settings to Firebase:', error);
+      alert('❌ حدث خطأ أثناء حفظ الإعدادات');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-indigo-600" />
+          <p className="text-slate-600 dark:text-slate-400">جاري تحميل الإعدادات من Firebase...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- Handlers: Backup ---
+  const handleCreateBackup = async () => {
+    if (!confirm('هل أنت متأكد من إنشاء نسخة احتياطية الآن؟')) return;
+    
+    setIsBackingUp(true);
+    try {
+      console.log('💾 Creating manual backup...');
+      const backupData = {
+        metadata: {
+          generatedAt: new Date().toISOString(),
+          version: '1.0',
+          appName: 'Al-Mizan',
+          recordCounts: {
+            cases: cases.length,
+            clients: clients.length,
+            hearings: hearings.length,
+            documents: 0, 
+            users: users.length
+          }
+        },
+        data: {
+          generalSettings,
+          users,
+          cases,
+          clients,
+          hearings,
+          tasks,
+          references
+        }
+      };
+
+      // Save to Firebase
+      const backupId = `backup_${Date.now()}`;
+      await setDoc(doc(db, 'backups', backupId), backupData);
+      console.log(`✅ Backup saved to Firebase with ID: ${backupId}`);
+
+      // Download as JSON
+      const jsonString = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `AlMizan_Backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      const now = new Date().toLocaleString('ar-EG');
+      setLastBackupDate(now);
+      localStorage.setItem('app_last_backup_date', now);
+      
+      // Reload backup points to show the new backup
+      await loadDataManagementData();
+      
+      alert('✅ تم إنشاء نسخة احتياطية بنجاح');
+    } catch (error) {
+      console.error('❌ Backup creation error:', error);
+      alert('❌ حدث خطأ أثناء إنشاء النسخة الاحتياطية');
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
+
+  const handleRestoreBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+     const file = e.target.files?.[0];
+     if (!file) return;
+
+     if (!confirm("تحذير: استعادة النسخة الاحتياطية ستقوم باستبدال جميع البيانات الحالية بالبيانات الموجودة في الملف. هل أنت متأكد من المتابعة؟")) {
+        if (restoreFileRef.current) restoreFileRef.current.value = '';
+        return;
+     }
+
+     setIsRestoring(true);
+     try {
+        const text = await file.text();
+        const backupObj = JSON.parse(text);
+
+        if (!backupObj.data || !backupObj.metadata || backupObj.metadata.appName !== 'Al-Mizan') {
+           throw new Error("ملف غير صالح أو تالف. تأكد من اختيار ملف Backup تم تصديره من هذا النظام.");
+        }
+
+        // Restore to Firebase
+        if (backupObj.data.cases) {
+          for (const case_ of backupObj.data.cases) {
+            await setDoc(doc(db, 'cases', case_.id), case_);
+          }
+        }
+
+        if (backupObj.data.clients) {
+          for (const client of backupObj.data.clients) {
+            await setDoc(doc(db, 'clients', client.id), client);
+          }
+        }
+
+        if (backupObj.data.users) {
+          for (const user of backupObj.data.users) {
+            await setDoc(doc(db, 'users', user.id), user);
+          }
+        }
+
+        // Restore general settings
+        if (backupObj.data.generalSettings) {
+           setGeneralSettings(backupObj.data.generalSettings);
+           await setDoc(doc(db, 'settings', 'general'), backupObj.data.generalSettings);
+           if (onThemeChange && backupObj.data.generalSettings.theme) {
+              onThemeChange(backupObj.data.generalSettings.theme);
+           }
+        }
+
+        if (onRestoreData) {
+           onRestoreData(backupObj.data);
+        }
+
+        alert('✅ تم استعادة البيانات بنجاح');
+     } catch (error) {
+        console.error("Restore Error:", error);
+        alert("فشل استعادة البيانات. الملف قد يكون تالفاً.");
+     } finally {
+        setIsRestoring(false);
+        if (restoreFileRef.current) restoreFileRef.current.value = '';
+     }
+  };
+
+  // Load data management data from Firebase
+  const loadDataManagementData = async () => {
+    try {
+      console.log('🔄 Starting to load data management data...');
+      
+      // Load backup points with timeout - تحميل النسخ الاحتياطية أولاً
+      console.log('🔄 Loading backup points from Firebase...');
+      const backupPromise = getDocs(collection(db, 'backups'));
+      const backupTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Backup points load timeout')), 15000)
+      );
+      
+      const backupSnapshot = await Promise.race([backupPromise, backupTimeoutPromise]);
+      console.log('📋 Backup snapshot result:', backupSnapshot);
+      
+      if (backupSnapshot && (backupSnapshot as any).docs) {
+        const backupData = (backupSnapshot as any).docs.map((doc: any) => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        console.log('📊 Raw backup data:', backupData);
+        
+        const sortedBackupData = backupData.sort((a: any, b: any) => {
+          const dateA = new Date(a.createdAt || a.metadata?.generatedAt || 0).getTime();
+          const dateB = new Date(b.createdAt || b.metadata?.generatedAt || 0).getTime();
+          return dateB - dateA;
+        });
+        
+        console.log(`💾 Loaded and sorted ${sortedBackupData.length} backup points:`, sortedBackupData);
+        setBackupPoints(sortedBackupData);
+      } else {
+        console.log('📭 No backup points found in Firebase - checking if snapshot exists');
+        console.log('📭 Snapshot type:', typeof backupSnapshot);
+        console.log('📭 Snapshot:', backupSnapshot);
+        setBackupPoints([]);
+      }
+
+      // Load archived cases with timeout
+      const archivedPromise = getDocs(collection(db, 'archived_cases'));
+      const archivedTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Archived cases load timeout')), 10000)
+      );
+      
+      const archivedSnapshot = await Promise.race([archivedPromise, archivedTimeoutPromise]);
+      if (archivedSnapshot && (archivedSnapshot as any).docs) {
+        const archivedData = (archivedSnapshot as any).docs.map((doc: any) => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setArchivedCases(archivedData);
+        console.log(`📁 Loaded ${archivedData.length} archived cases`);
+      } else {
+        setArchivedCases([]);
+      }
+
+      // Load auto backup settings with timeout
+      const autoBackupPromise = getDoc(doc(db, 'settings', 'autoBackup'));
+      const autoBackupTimeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Auto backup settings load timeout')), 8000)
+      );
+      
+      const autoBackupDoc = await Promise.race([autoBackupPromise, autoBackupTimeoutPromise]);
+      if (autoBackupDoc && (autoBackupDoc as any).exists()) {
+        setAutoBackupSettings((autoBackupDoc as any).data());
+        setAutoBackupFrequency((autoBackupDoc as any).data().frequency || 'weekly');
+        console.log('⚙️ Loaded auto backup settings:', (autoBackupDoc as any).data());
+      } else {
+        console.log('⚙️ No auto backup settings found');
+        setAutoBackupSettings(null);
+      }
+    } catch (error) {
+      console.error('❌ Error loading data management data:', error);
+      console.error('❌ Error details:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      
+      // Only set empty arrays if this is a real error, not timeout
+      if (!error.message.includes('timeout')) {
+        setArchivedCases([]);
+        setBackupPoints([]);
+        setAutoBackupSettings(null);
+      }
+    }
+  };
+
+  const handleArchiveData = async () => {
+    if (!archiveDate) {
+      alert('يرجى تحديد تاريخ الأرشفة');
+      return;
+    }
+    
+    if (!confirm(`هل أنت متأكد من أرشفة جميع القضايا قبل ${archiveDate}؟`)) return;
+    
+    try {
+      const cutoffDate = new Date(archiveDate);
+      const oldCases = cases.filter((case_: any) => {
+        // استخدام year أو startDate بدلاً من date غير الموجود
+        const caseDate = case_.startDate ? new Date(case_.startDate) : new Date(case_.year, 0, 1);
+        return caseDate < cutoffDate && case_.status === 'مغلقة';
+      });
+      
+      console.log(`🔄 Found ${oldCases.length} cases to archive`);
+      
+      for (const case_ of oldCases) {
+        await setDoc(doc(db, 'archived_cases', case_.id), {
+          ...case_,
+          archivedAt: new Date().toISOString(),
+          originalCollection: 'cases',
+          archiveReason: 'old_completed_case'
+        });
+        
+        await deleteDoc(doc(db, 'cases', case_.id));
+      }
+      
+      alert(`✅ تم أرشفة ${oldCases.length} قضية بنجاح`);
+      setArchiveDate('');
+      
+      // Reload archived cases
+      await loadDataManagementData();
+    } catch (error) {
+      console.error('Archive error:', error);
+      alert('❌ حدث خطأ أثناء الأرشفة');
+    }
+  };
+
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const data = file.name.endsWith('.csv') ? parseCSV(text) : JSON.parse(text);
+      
+      // Import based on data type
+      if (data.cases) {
+        for (const case_ of data.cases) {
+          await setDoc(doc(db, 'cases', case_.id || Date.now().toString()), case_);
+        }
+      }
+      
+      if (data.clients) {
+        for (const client of data.clients) {
+          await setDoc(doc(db, 'clients', client.id || Date.now().toString()), client);
+        }
+      }
+      
+      alert('✅ تم استيراد البيانات بنجاح');
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('❌ حدث خطأ أثناء استيراد البيانات');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleExportData = async (format: 'json' | 'csv' | 'excel') => {
+    setIsExporting(true);
+    try {
+      const exportData = {
+        cases: cases,
+        clients: clients,
+        hearings: hearings,
+        tasks: tasks,
+        exportedAt: new Date().toISOString()
+      };
+      
+      let content: string;
+      let filename: string;
+      let mimeType: string;
+      
+      if (format === 'json') {
+        content = JSON.stringify(exportData, null, 2);
+        filename = `AlMizan_Export_${new Date().toISOString().split('T')[0]}.json`;
+        mimeType = 'application/json';
+      } else if (format === 'csv') {
+        content = convertToCSV(exportData);
+        filename = `AlMizan_Export_${new Date().toISOString().split('T')[0]}.csv`;
+        mimeType = 'text/csv';
+      } else {
+        // Excel format (simplified)
+        content = convertToCSV(exportData);
+        filename = `AlMizan_Export_${new Date().toISOString().split('T')[0]}.csv`;
+        mimeType = 'application/vnd.ms-excel';
+      }
+      
+      const blob = new Blob([content], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      alert(`✅ تم تصدير البيانات بنجاح بصيغة ${format.toUpperCase()}`);
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('❌ حدث خطأ أثناء تصدير البيانات');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleAutoBackupSetup = async () => {
+    try {
+      const backupData = {
+        frequency: autoBackupFrequency,
+        enabled: true,
+        lastBackup: new Date().toISOString(),
+        createdAt: new Date().toISOString()
+      };
+      
+      await setDoc(doc(db, 'settings', 'autoBackup'), backupData);
+      
+      setAutoBackupSettings(backupData);
+      
+      alert(`✅ تم إعداد النسخ الاحتياطي التلقائي: ${autoBackupFrequency}`);
+    } catch (error) {
+      console.error('Auto backup setup error:', error);
+      alert('❌ حدث خطأ أثناء إعداد النسخ الاحتياطي التلقائي');
+    }
+  };
+
+  const handleRestoreToPoint = async () => {
+    if (!restorePoint) {
+      alert('يرجى تحديد نقطة الاستعادة');
+      return;
+    }
+    
+    if (!confirm(`سيتم استعادة النظام إلى تاريخ ${restorePoint}. هل أنت متأكد؟`)) return;
+    
+    try {
+      const backupDoc = await getDoc(doc(db, 'backups', restorePoint));
+      if (backupDoc.exists()) {
+        const backupData = backupDoc.data();
+        
+        // Restore all data
+        if (backupData.data.cases) {
+          for (const case_ of backupData.data.cases) {
+            await setDoc(doc(db, 'cases', case_.id), case_);
+          }
+        }
+        
+        if (backupData.data.clients) {
+          for (const client of backupData.data.clients) {
+            await setDoc(doc(db, 'clients', client.id), client);
+          }
+        }
+        
+        alert('✅ تم استعادة البيانات بنجاح');
+        setRestorePoint('');
+        
+        // Reload backup points
+        await loadDataManagementData();
+      } else {
+        alert('❌ لم يتم العثور على نقطة الاستعادة المحددة');
+      }
+    } catch (error) {
+      console.error('Restore error:', error);
+      alert('❌ حدث خطأ أثناء استعادة البيانات');
+    }
+  };
+
+  // Generate Report Handler
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      console.log('🔄 Generating report with settings:', reportSettings);
+      
+      // Filter data based on settings
+      let filteredCases = [...cases];
+      if (!reportSettings.includeArchived) {
+        filteredCases = filteredCases.filter(c => c.status !== 'مؤرشفة');
+      }
+      
+      if (reportSettings.dateRange !== 'all') {
+        const now = new Date();
+        let cutoffDate = new Date();
+        
+        switch (reportSettings.dateRange) {
+          case 'month':
+            cutoffDate.setMonth(now.getMonth() - 1);
+            break;
+          case 'quarter':
+            cutoffDate.setMonth(now.getMonth() - 3);
+            break;
+          case 'year':
+            cutoffDate.setFullYear(now.getFullYear() - 1);
+            break;
+        }
+        
+        filteredCases = filteredCases.filter(c => {
+          const caseDate = c.startDate ? new Date(c.startDate) : new Date(c.year, 0, 1);
+          return caseDate >= cutoffDate;
+        });
+      }
+      
+      // Generate report content
+      const reportData = {
+        title: 'تقرير القضايا',
+        generatedAt: new Date().toLocaleString('ar-SA'),
+        settings: reportSettings,
+        summary: {
+          totalCases: filteredCases.length,
+          openCases: filteredCases.filter(c => c.status === 'مفتوحة').length,
+          closedCases: filteredCases.filter(c => c.status === 'مغلقة').length,
+          archivedCases: archivedCases.length
+        },
+        cases: filteredCases.map(c => ({
+          number: c.caseNumber,
+          title: c.title,
+          client: c.clientName,
+          status: c.status,
+          court: c.court,
+          year: c.year,
+          startDate: c.startDate
+        }))
+      };
+      
+      // Generate and download report
+      if (reportSettings.format === 'pdf') {
+        // For now, generate JSON (can be enhanced with PDF library)
+        const jsonString = JSON.stringify(reportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `تقرير_القضايا_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        // CSV format
+        const csvContent = convertToCSV({ cases: filteredCases });
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `تقرير_القضايا_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+      
+      alert(`✅ تم إنشاء التقرير بنجاح (${filteredCases.length} قضية)`);
+    } catch (error) {
+      console.error('Report generation error:', error);
+      alert('❌ حدث خطأ أثناء إنشاء التقرير');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const handlePrintReport = () => {
+    if (reportRef.current) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html dir="rtl">
+            <head>
+              <title>تقرير القضايا</title>
+              <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+                th { background-color: #f2f2f2; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .summary { margin-bottom: 20px; }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <h1>تقرير القضايا</h1>
+                <p>تاريخ الإنشاء: ${new Date().toLocaleString('ar-SA')}</p>
+              </div>
+              ${reportRef.current.innerHTML}
+            </body>
+          </html>
+        `);
+        printWindow.document.close();
+        printWindow.print();
+      }
+  const handleCleanData = async () => {
+    if (!confirm('هل أنت متأكد من تنظيف البيانات غير الضرورية؟ سيتم حذف البيانات المؤقتة والملفات غير المستخدمة.')) return;
+    
+    setIsCleaning(true);
+    try {
+      // Clean temporary files
+      const tempDocs = await getDocs(collection(db, 'temp_files'));
+      for (const doc of tempDocs.docs) {
+        await deleteDoc(doc.ref);
+      }
+      
+      // Clean old logs
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+      
+      alert('✅ تم تنظيف البيانات بنجاح');
+      await loadDataManagementData();
+    } catch (error) {
+      console.error('Clean data error:', error);
+      alert('❌ حدث خطأ أثناء تنظيف البيانات');
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  const convertToCSV = (text: string) => {
+    const lines = text.split('\n');
+    const headers = lines[0].split(',');
+    const result = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',');
+      const obj: any = {};
+      headers.forEach((header, index) => {
+        obj[header.trim()] = values[index]?.trim();
+      });
+      result.push(obj);
+    }
+    
+    return result;
+  };
+
+  const handleCleanData = async () => {
+    if (!confirm('هل أنت متأكد من تنظيف البيانات غير الضرورية؟ سيتم حذف البيانات المؤقتة والملفات غير المستخدمة.')) return;
+    
+    setIsCleaning(true);
+    try {
+      // Clean temporary files
+      const tempDocs = await getDocs(collection(db, 'temp_files'));
+      for (const doc of tempDocs.docs) {
+        await deleteDoc(doc.ref);
+      }
+      
+      // Clean old logs
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - 30);
+      
+      const oldLogs = await getDocs(collection(db, 'activity_logs'));
+      for (const doc of oldLogs.docs) {
+        const logData = doc.data();
+        if (new Date(logData.timestamp) < cutoffDate) {
+          await deleteDoc(doc.ref);
+        }
+      }
+      
+      alert('✅ تم تنظيف البيانات بنجاح');
+      await loadDataManagementData();
+    } catch (error) {
+      console.error('Clean data error:', error);
+      alert('❌ حدث خطأ أثناء تنظيف البيانات');
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    setIsGeneratingReport(true);
+    try {
+      console.log('🔄 Generating report with settings:', reportSettings);
+      
+      // Filter data based on settings
+      let filteredCases = [...cases];
+      if (!reportSettings.includeArchived) {
+        filteredCases = filteredCases.filter(c => c.status !== 'مؤرشفة');
+      }
+      
+      if (reportSettings.dateRange !== 'all') {
+        const now = new Date();
+        let cutoffDate = new Date();
+        
+        switch (reportSettings.dateRange) {
+          case 'month':
+            cutoffDate.setMonth(now.getMonth() - 1);
+            break;
+          case 'quarter':
+            cutoffDate.setMonth(now.getMonth() - 3);
+            break;
+          case 'year':
+            cutoffDate.setFullYear(now.getFullYear() - 1);
+            break;
+        }
+        
+        filteredCases = filteredCases.filter(c => {
+          const caseDate = c.startDate ? new Date(c.startDate) : new Date(c.year, 0, 1);
+          return caseDate >= cutoffDate;
+        });
+      }
+      
+      // Generate report content
+      const reportData = {
+        title: 'تقرير القضايا',
+        generatedAt: new Date().toLocaleString('ar-SA'),
+        settings: reportSettings,
+        summary: {
+          totalCases: filteredCases.length,
+          openCases: filteredCases.filter(c => c.status === 'مفتوحة').length,
+          closedCases: filteredCases.filter(c => c.status === 'مغلقة').length,
+          archivedCases: archivedCases.length
+        },
+        cases: filteredCases.map(c => ({
+          number: c.caseNumber,
+          title: c.title,
+          client: c.clientName,
+          status: c.status,
+          court: c.court,
+          year: c.year,
+          startDate: c.startDate
+        }))
+      };
+      
+      // Generate and download report
+      if (reportSettings.format === 'pdf') {
+        // For now, generate JSON (can be enhanced with PDF library)
+        const jsonString = JSON.stringify(reportData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `تقرير_القضايا_${new Date().toISOString().split('T')[0]}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else {
+        // CSV format
+        const csvContent = convertToCSV({ cases: filteredCases });
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `تقرير_القضايا_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }
+      
+      alert(`✅ تم إنشاء التقرير بنجاح (${filteredCases.length} قضية)`);
+    } catch (error) {
+      console.error('Report generation error:', error);
+      alert('❌ حدث خطأ أثناء إنشاء التقرير');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  const handlePrintReport = () => {
+    if (reportRef.current) {
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(`
+          <html dir="rtl">
+            <head>
+              <title>تقرير القضايا</title>
+              <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                table { width: 100%; border-collapse: collapse; }
+                th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+                th { background-color: #f2f2f2; }
+                .header { text-align: center; margin-bottom: 20px; }
+                .summary { margin-bottom: 20px; }
+              </style>
+            </head>
+            <body>
+  const renderReportsTab = () => (
+    <div className="space-y-6 animate-in fade-in">
+      <h2 className="text-xl font-bold text-slate-800 dark:text-white mb-6">التقارير والطباعة</h2>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Report Settings */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-4">
+            <FileReport className="w-8 h-8 text-green-600" />
+            <h4 className="font-bold text-slate-800 dark:text-white">إعدادات التقارير</h4>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">نطاق التاريخ</label>
+              <select
+                value={reportSettings.dateRange}
+                onChange={(e) => setReportSettings({...reportSettings, dateRange: e.target.value})}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white"
+                disabled={readOnly}
+              >
+                <option value="all">جميع الفترات</option>
+                <option value="month">آخر شهر</option>
+                <option value="quarter">آخر 3 أشهر</option>
+                <option value="year">آخر سنة</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">صيغة التقرير</label>
+              <select
+                value={reportSettings.format}
+                onChange={(e) => setReportSettings({...reportSettings, format: e.target.value})}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white"
+                disabled={readOnly}
+              >
+                <option value="pdf">PDF</option>
+                <option value="excel">Excel</option>
+                <option value="csv">CSV</option>
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                id="includeArchived"
+                checked={reportSettings.includeArchived}
+                onChange={(e) => setReportSettings({...reportSettings, includeArchived: e.target.checked})}
+                className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                disabled={readOnly}
+              />
+              <label htmlFor="includeArchived" className="text-sm text-slate-700 dark:text-slate-300">
+                تضمين القضايا المؤرشفة
+              </label>
+            </div>
+          </div>
+        </div>
+
+        {/* Generate Report */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-4">
+            <Printer className="w-8 h-8 text-blue-600" />
+            <h4 className="font-bold text-slate-800 dark:text-white">توليد التقرير</h4>
+          </div>
+          <div className="space-y-3">
+            <button
+              onClick={handleGenerateReport}
+              disabled={isGeneratingReport || readOnly}
+              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isGeneratingReport ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  جاري إنشاء التقرير...
+                </span>
+              ) : 'إنشاء التقرير'}
+            </button>
+            
+            <button
+              onClick={handlePrintReport}
+              disabled={readOnly}
+              className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              <Printer className="w-4 h-4 inline ml-2" /> طباعة مباشرة
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Report Summary */}
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center gap-3 mb-4">
+          <FileText className="w-8 h-8 text-purple-600" />
+          <h4 className="font-bold text-slate-800 dark:text-white">ملخص التقرير</h4>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{cases.length}</div>
+            <div className="text-sm text-slate-600 dark:text-slate-400">إجمالي القضايا</div>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">{cases.filter(c => c.status === 'مفتوحة').length}</div>
+            <div className="text-sm text-slate-600 dark:text-slate-400">قضايا مفتوحة</div>
+          </div>
+          <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg text-center">
+            <div className="text-2xl font-bold text-red-600 dark:text-red-400">{cases.filter(c => c.status === 'مغلقة').length}</div>
+            <div className="text-sm text-slate-600 dark:text-slate-400">قضايا مغلقة</div>
+          </div>
+        </div>
+        
+        <div className="mt-6">
+          <h5 className="font-bold text-slate-800 dark:text-white mb-3">ملخص التقرير</h5>
+          <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              سيتم إنشاء تقرير شامل لـ <span className="font-bold text-indigo-600">{cases.length}</span> قضية
+              {reportSettings.dateRange !== 'all' && (
+                <span> خلال الفترة المحددة ({reportSettings.dateRange === 'month' ? 'آخر شهر' : reportSettings.dateRange === 'quarter' ? 'آخر 3 أشهر' : 'آخر سنة'})</span>
+              )}
+              {reportSettings.includeArchived && (
+                <span> مع تضمين <span className="font-bold text-orange-600">{archivedCases.length}</span> قضية مؤرشفة</span>
+              )}
+              بصيغة <span className="font-bold text-green-600">{reportSettings.format.toUpperCase()}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const parseCSV = (text: string) => {
+    const lines = text.split('\n');
+    const headers = lines[0].split(',');
+    const data = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',');
+      const obj: any = {};
+      headers.forEach((header, index) => {
+        obj[header.trim()] = values[index]?.trim();
+      });
+      data.push(obj);
+    }
+    
+    return { cases: data };
+  };
+
+  const convertToCSV = (data: any) => {
+    if (!data.cases || data.cases.length === 0) return '';
+    
+    const headers = Object.keys(data.cases[0]);
+    const csvHeaders = headers.join(',');
+    const csvRows = data.cases.map((row: any) => 
+      headers.map(header => `"${row[header] || ''}"`).join(',')
+    );
+    
+    return [csvHeaders, ...csvRows].join('\n');
+  };
+  const handlePasswordChange = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (securityData.newPassword !== securityData.confirmPassword) {
+      alert('كلمة المرور الجديدة غير متطابقة');
+      return;
+    }
+    setIsSaving(true);
+    setTimeout(() => {
+      setIsSaving(false);
+      setSecurityData(prev => ({ ...prev, currentPassword: '', newPassword: '', confirmPassword: '' }));
+      alert('تم تحديث كلمة المرور بنجاح');
+    }, 1000);
+  };
+
+  // --- Handlers: Users ---
+
+  const openAddUser = () => {
+    setEditingUser(null);
+    setFormData({
+      name: '',
+      email: '',
+      username: '',
+      password: '',
+      roleLabel: 'موظف',
+      isActive: true,
+      permissions: MODULES.map(m => ({ moduleId: m.id, access: 'none' as PermissionLevel }))
+    });
+    setIsUserModalOpen(true);
+  };
+
+  const openEditUser = (user: AppUser) => {
+    setEditingUser(user);
+    const mergedPermissions = MODULES.map(m => {
+      const existing = user.permissions.find(p => p.moduleId === m.id);
+      return existing || { moduleId: m.id, access: 'none' as PermissionLevel };
+    });
+
+    setFormData({
+      ...user,
+      password: '', 
+      permissions: mergedPermissions
+    });
+    setIsUserModalOpen(true);
+  };
+
+  const handlePermissionChange = (moduleId: string, access: PermissionLevel) => {
+    const updatedPermissions = formData.permissions?.map(p => 
+      p.moduleId === moduleId ? { ...p, access } : p
+    );
+    setFormData({ ...formData, permissions: updatedPermissions });
+  };
+
+  const handleSaveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.email) return;
+
+    if (!editingUser && !formData.password) {
+      alert('يرجى تعيين كلمة مرور للمستخدم الجديد');
+      return;
+    }
+
+    if (editingUser && onUpdateUser) {
+      const updatedUser = { ...editingUser, ...formData };
+      if (!formData.password) {
+         updatedUser.password = editingUser.password;
+      }
+      onUpdateUser(updatedUser as AppUser);
+    } else if (onAddUser) {
+      const newUser: AppUser = {
+        id: Math.random().toString(36).substring(2, 9),
+        name: formData.name!,
+        email: formData.email!,
+        username: formData.username,
+        password: formData.password,
+        roleLabel: formData.roleLabel || 'موظف',
+        isActive: formData.isActive || true,
+        permissions: formData.permissions || [],
+        avatar: undefined
+      };
+      onAddUser(newUser);
+    }
+    setIsUserModalOpen(false);
+  };
+
+  // --- Handlers: General Settings ---
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setGeneralSettings(prev => ({ ...prev, logoPreview: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSaveSettings = () => {
+    if (readOnly) {
+       alert("ليس لديك صلاحية لتعديل الإعدادات");
+       return;
+    }
+    saveSettingsToFirebase();
+  };
+
+  const handleThemeSwitch = (theme: 'light' | 'dark') => {
+    setGeneralSettings(prev => ({ ...prev, theme }));
+    if (onThemeChange) {
+      onThemeChange(theme);
+    }
+  };
+
+  const renderDataManagementTab = () => (
+    <div className="space-y-6 animate-in fade-in">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800 dark:text-white">إدارة البيانات المتقدمة</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">أرشفة، استيراد، تصدير، نسخ احتياطي، تنظيف البيانات</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Archive Data Card */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-4">
+            <Archive className="w-8 h-8 text-purple-600" />
+            <h4 className="font-bold text-slate-800 dark:text-white">أرشفة البيانات</h4>
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            أرشفة القضايا القديمة تلقائياً
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تاريخ الأرشفة</label>
+              <input
+                type="date"
+                value={archiveDate}
+                onChange={(e) => setArchiveDate(e.target.value)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white"
+                disabled={readOnly}
+              />
+            </div>
+            <button
+              onClick={handleArchiveData}
+              disabled={readOnly}
+              className="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              أرشفة الآن
+            </button>
+            {archivedCases.length > 0 && (
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                عدد القضايا المؤرشفة: {archivedCases.length}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Import/Export Card */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-4">
+            <Upload className="w-8 h-8 text-blue-600" />
+            <h4 className="font-bold text-slate-800 dark:text-white">استيراد/تصدير</h4>
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            استيراد وتصدير البيانات بصيغ متعددة
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer block text-center">
+                {isImporting ? 'جاري الاستيراد...' : 'استيراد من Excel/CSV'}
+                <input
+                  ref={importFileRef}
+                  type="file"
+                  accept=".csv,.xlsx,.json"
+                  onChange={handleImportData}
+                  className="hidden"
+                  disabled={isImporting || readOnly}
+                />
+              </label>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleExportData('json')}
+                disabled={isExporting || readOnly}
+                className="flex-1 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+              >
+                JSON
+              </button>
+              <button
+                onClick={() => handleExportData('csv')}
+                disabled={isExporting || readOnly}
+                className="flex-1 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+              >
+                CSV
+              </button>
+              <button
+                onClick={() => handleExportData('excel')}
+                disabled={isExporting || readOnly}
+                className="flex-1 bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+              >
+                Excel
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Auto Backup Card */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-4">
+            <Clock className="w-8 h-8 text-orange-600" />
+            <h4 className="font-bold text-slate-800 dark:text-white">نسخ احتياطي تلقائي</h4>
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            إعداد نسخ احتياطي دوري
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">التكرار</label>
+              <select
+                value={autoBackupFrequency}
+                onChange={(e) => setAutoBackupFrequency(e.target.value)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white"
+                disabled={readOnly}
+              >
+                <option value="daily">يومي</option>
+                <option value="weekly">أسبوعي</option>
+                <option value="monthly">شهري</option>
+              </select>
+            </div>
+            <button
+              onClick={handleAutoBackupSetup}
+              disabled={readOnly}
+              className="w-full bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              إعداد النسخ التلقائي
+            </button>
+            {autoBackupSettings && (
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                الحالة: {autoBackupSettings.enabled ? 'مفعل' : 'معطل'}
+                <br />
+                آخر نسخة: {autoBackupSettings.lastBackup ? new Date(autoBackupSettings.lastBackup).toLocaleDateString('ar-SA') : 'لا يوجد'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Restore Data Card */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-4">
+            <RotateCcw className="w-8 h-8 text-indigo-600" />
+            <h4 className="font-bold text-slate-800 dark:text-white">استعادة البيانات</h4>
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            استعادة البيانات لنقطة زمنية محددة
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">نقطة الاستعادة</label>
+              <select
+                value={restorePoint}
+                onChange={(e) => setRestorePoint(e.target.value)}
+                className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white"
+                disabled={readOnly}
+              >
+                <option value="">اختر نقطة استعادة</option>
+                {backupPoints.map((point: any) => (
+                  <option key={point.id} value={point.id}>
+                    {new Date(point.createdAt || point.metadata?.generatedAt).toLocaleDateString('ar-SA')} 
+                    {point.metadata?.version && ` (${point.metadata.version})`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => loadDataManagementData()}
+              disabled={readOnly}
+              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mb-2"
+            >
+              إعادة تحميل البيانات
+            </button>
+            <button
+              onClick={handleRestoreToPoint}
+              disabled={readOnly}
+              className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              استعادة الآن
+            </button>
+            {backupPoints.length > 0 && (
+              <>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  عدد نقاط الاستعادة: {backupPoints.length}
+                </div>
+                <div className="text-xs text-blue-500 dark:text-blue-400">
+                  آخر نسخة: {backupPoints[0] && new Date(backupPoints[0].createdAt || backupPoints[0].metadata?.generatedAt).toLocaleDateString('ar-SA')}
+                </div>
+              </>
+            )}
+            {backupPoints.length === 0 && (
+              <div className="text-xs text-orange-500 dark:text-orange-400">
+                لا توجد نسخ احتياطية محفوظة
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Clean Data Card */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-4">
+            <Trash2 className="w-8 h-8 text-red-600" />
+            <h4 className="font-bold text-slate-800 dark:text-white">تنظيف البيانات</h4>
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            حذف البيانات غير الضرورية والملفات المؤقتة
+          </p>
+          <div className="space-y-3">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              سيتم حذف:
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li>الملفات المؤقتة</li>
+                <li>سجلات النظام القديمة (أقدم من 30 يوم)</li>
+                <li>البيانات غير المستخدمة</li>
+              </ul>
+            </div>
+            <button
+              onClick={handleCleanData}
+              disabled={isCleaning || readOnly}
+              className="w-full bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isCleaning ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  جاري التنظيف...
+                </span>
+              ) : 'تنظيف الآن'}
+            </button>
+          </div>
+        </div>
+
+        {/* Manual Backup Card */}
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex items-center gap-3 mb-4">
+            <Database className="w-8 h-8 text-green-600" />
+            <h4 className="font-bold text-slate-800 dark:text-white">نسخ احتياطي يدوي</h4>
+          </div>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+            إنشاء نسخة احتياطية كاملة فوراً
+          </p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-slate-700 dark:text-slate-300">آخر نسخة احتياطية</label>
+              <div className="text-xs text-slate-500 dark:text-slate-400">
+                {lastBackupDate ? new Date(lastBackupDate).toLocaleString('ar-SA') : 'لم يتم إنشاء نسخ احتياطية بعد'}
+              </div>
+            </div>
+            <button
+              onClick={handleCreateBackup}
+              disabled={isBackingUp || readOnly}
+              className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isBackingUp ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  جاري النسخ...
+                </span>
+              ) : 'نسخ احتياطي الآن'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Archived Cases Table */}
+      {archivedCases.length > 0 && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+          <h4 className="font-bold text-slate-800 dark:text-white mb-4">القضايا المؤرشفة</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="text-right pb-3 font-medium text-slate-700 dark:text-slate-300">رقم القضية</th>
+                  <th className="text-right pb-3 font-medium text-slate-700 dark:text-slate-300">العنوان</th>
+                  <th className="text-right pb-3 font-medium text-slate-700 dark:text-slate-300">تاريخ الأرشفة</th>
+                  <th className="text-right pb-3 font-medium text-slate-700 dark:text-slate-300">الإجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {archivedCases.slice(0, 5).map((case_: any) => (
+                  <tr key={case_.id} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="py-3 text-slate-600 dark:text-slate-400">{case_.caseNumber || case_.id}</td>
+                    <td className="py-3 text-slate-600 dark:text-slate-400">{case_.title || 'غير محدد'}</td>
+                    <td className="py-3 text-slate-600 dark:text-slate-400">
+                      {new Date(case_.archivedAt).toLocaleDateString('ar-SA')}
+                    </td>
+                    <td className="py-3">
+                      <button
+                        onClick={() => handleRestoreArchivedCase(case_.id)}
+                        disabled={readOnly}
+                        className="text-indigo-600 hover:text-indigo-700 text-sm font-medium disabled:opacity-50"
+                      >
+                        استعادة
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Restore archived case
+  const handleRestoreArchivedCase = async (archivedCaseId: string) => {
+    if (!confirm('هل أنت متأكد من استعادة هذه القضية؟')) return;
+    
+    try {
+      const archivedDoc = await getDoc(doc(db, 'archived_cases', archivedCaseId));
+      if (archivedDoc.exists()) {
+        const caseData = archivedDoc.data();
+        
+        // Restore to main collection
+        await setDoc(doc(db, 'cases', archivedCaseId), {
+          ...caseData,
+          restoredAt: new Date().toISOString()
+        });
+        
+        // Delete from archive
+        await deleteDoc(doc(db, 'archived_cases', archivedCaseId));
+        
+        alert('✅ تم استعادة القضية بنجاح');
+        await loadDataManagementData();
+      }
+    } catch (error) {
+      console.error('Restore archived case error:', error);
+      alert('❌ حدث خطأ أثناء استعادة القضية');
+    }
+  };
+
+  const renderGeneralTab = () => (
+    <div className="space-y-6 animate-in fade-in">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800 dark:text-white">الإعدادات العامة</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">تخصيص بيانات المكتب وتفضيلات النظام</p>
+        </div>
+        {!readOnly && (
+          <button 
+            onClick={handleSaveSettings}
+            disabled={isSaving}
+            className="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-md shadow-indigo-200 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+          >
+            {isSaving ? (
+               <><Loader2 className="w-4 h-4 animate-spin" /> جاري الحفظ...</>
+            ) : (
+               <><Save className="w-4 h-4" /> حفظ التغييرات</>
+            )}
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        
+        {/* Column 1: Identity & Logo */}
+        <div className="xl:col-span-2 space-y-6">
+          {/* Identity Card */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+              <Building className="w-5 h-5 text-indigo-600" /> الهوية المؤسسية
+            </h4>
+            
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* Logo Upload */}
+              <div className="shrink-0 flex flex-col items-center gap-3">
+                <div 
+                  onClick={() => !readOnly && logoInputRef.current?.click()}
+                  className={`w-32 h-32 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 flex items-center justify-center ${!readOnly ? 'cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 dark:hover:bg-slate-600' : ''} transition-all overflow-hidden relative group`}
+                >
+                  {generalSettings.logoPreview ? (
+                    <img src={generalSettings.logoPreview} alt="Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <Upload className="w-8 h-8 text-slate-400 group-hover:text-indigo-500" />
+                  )}
+                  {!readOnly && (
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-white text-xs font-bold">تغيير الشعار</span>
+                    </div>
+                  )}
+                </div>
+                <input type="file" ref={logoInputRef} className="hidden" onChange={handleLogoUpload} accept="image/*" disabled={readOnly} />
+                <p className="text-xs text-slate-500 dark:text-slate-400">الشعار الرسمي (PNG/JPG)</p>
+              </div>
+
+              {/* Basic Inputs */}
+              <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">اسم المكتب / المؤسسة</label>
+                  <input 
+                    type="text" 
+                    readOnly={readOnly}
+                    className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                    value={generalSettings.firmName}
+                    onChange={e => setGeneralSettings({...generalSettings, firmName: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الشعار اللفظي (Slogan)</label>
+                  <input 
+                    type="text" 
+                    readOnly={readOnly}
+                    className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                    value={generalSettings.firmSlogan}
+                    onChange={e => setGeneralSettings({...generalSettings, firmSlogan: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">رقم السجل الضريبي / التجاري</label>
+                  <input 
+                    type="text" 
+                    readOnly={readOnly}
+                    className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                    value={generalSettings.taxNumber}
+                    onChange={e => setGeneralSettings({...generalSettings, taxNumber: e.target.value})}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">العنوان الرئيسي</label>
+                  <input 
+                    type="text" 
+                    readOnly={readOnly}
+                    className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                    value={generalSettings.address}
+                    onChange={e => setGeneralSettings({...generalSettings, address: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Contact Info Card */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+              <Phone className="w-5 h-5 text-indigo-600" /> بيانات التواصل
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2"><Phone className="w-3 h-3"/> الهاتف</label>
+                <input 
+                  type="text" 
+                  readOnly={readOnly}
+                  className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-left dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
+                  dir="ltr"
+                  value={generalSettings.phone}
+                  onChange={e => setGeneralSettings({...generalSettings, phone: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2"><Mail className="w-3 h-3"/> البريد الإلكتروني</label>
+                <input 
+                  type="email" 
+                  readOnly={readOnly}
+                  className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-left dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
+                  dir="ltr"
+                  value={generalSettings.email}
+                  onChange={e => setGeneralSettings({...generalSettings, email: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-2"><Globe className="w-3 h-3"/> الموقع الإلكتروني</label>
+                <input 
+                  type="text" 
+                  readOnly={readOnly}
+                  className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-left dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
+                  dir="ltr"
+                  value={generalSettings.website}
+                  onChange={e => setGeneralSettings({...generalSettings, website: e.target.value})}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Column 2: System & Notifications */}
+        <div className="space-y-6">
+          {/* System Preferences */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+              <SettingsIcon className="w-5 h-5 text-indigo-600" /> تفضيلات النظام
+            </h4>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">العملة الافتراضية</label>
+                <select 
+                  disabled={readOnly}
+                  className="w-full border p-2.5 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                  value={generalSettings.currency}
+                  onChange={e => setGeneralSettings({...generalSettings, currency: e.target.value})}
+                >
+                  <option value="EGP">الجنيه المصري (EGP)</option>
+                  <option value="USD">الدولار الأمريكي (USD)</option>
+                  <option value="SAR">الريال السعودي (SAR)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">اللغة</label>
+                <select 
+                  disabled={readOnly}
+                  className="w-full border p-2.5 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                  value={generalSettings.language}
+                  onChange={e => setGeneralSettings({...generalSettings, language: e.target.value})}
+                >
+                  <option value="ar">العربية</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">المظهر</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button 
+                    onClick={() => handleThemeSwitch('light')}
+                    className={`p-2 rounded-lg border flex items-center justify-center gap-2 transition-all ${
+                      generalSettings.theme === 'light' 
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200' 
+                        : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Sun className="w-4 h-4" /> فاتح
+                  </button>
+                  <button 
+                    onClick={() => handleThemeSwitch('dark')}
+                    className={`p-2 rounded-lg border flex items-center justify-center gap-2 transition-all ${
+                      generalSettings.theme === 'dark' 
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-200' 
+                        : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <Moon className="w-4 h-4" /> داكن
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Notifications */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+              <Bell className="w-5 h-5 text-amber-500" /> إعدادات التنبيهات
+            </h4>
+            <div className="space-y-3">
+              <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">تنبيهات النظام الداخلية</span>
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={generalSettings.enableSystemNotifications} onChange={e => !readOnly && setGeneralSettings({...generalSettings, enableSystemNotifications: e.target.checked})} disabled={readOnly} />
+                  <div className="w-11 h-6 bg-gray-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </div>
+              </label>
+              <label className="flex items-center justify-between cursor-pointer p-2 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">تنبيهات البريد الإلكتروني</span>
+                <div className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" className="sr-only peer" checked={generalSettings.enableEmailNotifications} onChange={e => !readOnly && setGeneralSettings({...generalSettings, enableEmailNotifications: e.target.checked})} disabled={readOnly} />
+                  <div className="w-11 h-6 bg-gray-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* Data Management */}
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+            <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+              <Database className="w-5 h-5 text-green-600" /> النسخ الاحتياطي (Backup)
+            </h4>
+            
+            <div className="space-y-4">
+               {/* Export Backup */}
+               <div>
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">تصدير البيانات</label>
+                  <button 
+                    onClick={handleCreateBackup}
+                    disabled={isBackingUp || readOnly}
+                    className="w-full flex items-center justify-center gap-3 p-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl font-bold hover:shadow-lg hover:from-green-700 hover:to-emerald-700 transition-all disabled:opacity-70"
+                  >
+                     {isBackingUp ? (
+                        <><Loader2 className="w-5 h-5 animate-spin" /> جاري التجهيز...</>
+                     ) : (
+                        <><Download className="w-5 h-5" /> تحميل نسخة كاملة (.JSON)</>
+                     )}
+                  </button>
+                  {lastBackupDate && (
+                     <div className="mt-2 text-center text-[10px] text-slate-400 flex items-center justify-center gap-1">
+                        <History className="w-3 h-3" />
+                        آخر نسخة محفوظة: {lastBackupDate}
+                     </div>
+                  )}
+               </div>
+
+               {/* Import Backup */}
+               <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">استعادة نسخة (Restore)</label>
+                  <label 
+                    onClick={() => { if(!isRestoring && !readOnly) restoreFileRef.current?.click(); }}
+                    className={`w-full flex flex-col items-center justify-center gap-2 p-4 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-indigo-400 transition-all group ${isRestoring || readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                     {isRestoring ? (
+                        <div className="flex flex-col items-center gap-2 text-indigo-600">
+                           <Loader2 className="w-6 h-6 animate-spin" />
+                           <span className="text-xs font-bold">جاري استعادة البيانات...</span>
+                        </div>
+                     ) : (
+                        <>
+                           <RotateCcw className="w-6 h-6 text-slate-400 group-hover:text-indigo-500" />
+                           <span className="text-xs text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 font-medium">اضغط لاستعادة ملف JSON</span>
+                        </>
+                     )}
+                     <input 
+                        type="file" 
+                        ref={restoreFileRef}
+                        className="hidden" 
+                        accept=".json" 
+                        onChange={handleRestoreBackup} 
+                        disabled={isRestoring || readOnly}
+                     />
+                  </label>
+               </div>
+
+               {/* Auto Backup Settings */}
+               <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700 mt-2">
+                  <div className="flex items-center justify-between">
+                     <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 text-xs font-bold">
+                        <HardDrive className="w-3 h-3" />
+                        <span>نسخ تلقائي</span>
+                     </div>
+                     <select 
+                       className="bg-transparent border-none text-xs font-bold text-indigo-600 dark:text-indigo-400 outline-none cursor-pointer text-right"
+                       value={generalSettings.autoBackup}
+                       onChange={e => setGeneralSettings({...generalSettings, autoBackup: e.target.value})}
+                       disabled={readOnly}
+                     >
+                       <option value="daily">يومياً</option>
+                       <option value="weekly">أسبوعياً</option>
+                       <option value="monthly">شهرياً</option>
+                       <option value="off">إيقاف</option>
+                     </select>
+                  </div>
+               </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderReportsTab = () => (
+    <div className="space-y-6 animate-in fade-in">
+      {/* Report Settings Card */}
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center gap-3 mb-4">
+          <FileReport className="w-8 h-8 text-green-600" />
+          <h4 className="font-bold text-slate-800 dark:text-white">إعدادات التقارير</h4>
+        </div>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+          تخصيص وتوليد التقارير والطباعة
+        </p>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">نطاق التاريخ</label>
+            <select
+              value={reportSettings.dateRange}
+              onChange={(e) => setReportSettings({...reportSettings, dateRange: e.target.value})}
+              className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white"
+              disabled={readOnly}
+            >
+              <option value="all">جميع الفترات</option>
+              <option value="month">آخر شهر</option>
+              <option value="quarter">آخر 3 أشهر</option>
+              <option value="year">آخر سنة</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">صيغة التقرير</label>
+            <select
+              value={reportSettings.format}
+              onChange={(e) => setReportSettings({...reportSettings, format: e.target.value})}
+              className="w-full border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 bg-white dark:bg-slate-700 dark:text-white"
+              disabled={readOnly}
+            >
+              <option value="pdf">PDF</option>
+              <option value="excel">Excel</option>
+              <option value="csv">CSV</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="includeArchived"
+              checked={reportSettings.includeArchived}
+              onChange={(e) => setReportSettings({...reportSettings, includeArchived: e.target.checked})}
+              className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+              disabled={readOnly}
+            />
+            <label htmlFor="includeArchived" className="text-sm text-slate-700 dark:text-slate-300">
+              تضمين القضايا المؤرشفة
+            </label>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              id="autoPrint"
+              checked={reportSettings.autoPrint}
+              onChange={(e) => setReportSettings({...reportSettings, autoPrint: e.target.checked})}
+              className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+              disabled={readOnly}
+            />
+            <label htmlFor="autoPrint" className="text-sm text-slate-700 dark:text-slate-300">
+              طباعة تلقائية بعد الإنشاء
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* Generate Report Card */}
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center gap-3 mb-4">
+          <Printer className="w-8 h-8 text-blue-600" />
+          <h4 className="font-bold text-slate-800 dark:text-white">توليد التقرير</h4>
+        </div>
+        <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+          إنشاء وتحميل التقرير حسب الإعدادات
+        </p>
+        <div className="space-y-3">
+          <button
+            onClick={handleGenerateReport}
+            disabled={isGeneratingReport || readOnly}
+            className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isGeneratingReport ? (
+              <span className="flex items-center justify-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                جاري إنشاء التقرير...
+              </span>
+            ) : 'إنشاء التقرير'}
+          </button>
+          
+          <button
+            onClick={handlePrintReport}
+            disabled={readOnly}
+            className="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Printer className="w-4 h-4 inline ml-2" /> طباعة مباشرة
+          </button>
+        </div>
+      </div>
+
+      {/* Report Preview */}
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="flex items-center gap-3 mb-4">
+          <FileText className="w-8 h-8 text-purple-600" />
+          <h4 className="font-bold text-slate-800 dark:text-white">معاينة التقرير</h4>
+        </div>
+        <div ref={reportRef} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg">
+              <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{cases.length}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">إجمالي القضايا</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg">
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{cases.filter(c => c.status === 'مفتوحة').length}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">قضايا مفتوحة</div>
+            </div>
+            <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg">
+              <div className="text-2xl font-bold text-red-600 dark:text-red-400">{cases.filter(c => c.status === 'مغلقة').length}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">قضايا مغلقة</div>
+            </div>
+          </div>
+          
+          <div className="mt-6">
+            <h5 className="font-bold text-slate-800 dark:text-white mb-3">ملخص التقرير</h5>
+            <div className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                سيتم إنشاء تقرير شامل لـ <span className="font-bold text-indigo-600">{cases.length}</span> قضية
+                {reportSettings.dateRange !== 'all' && (
+                  <span> خلال الفترة المحددة ({reportSettings.dateRange === 'month' ? 'آخر شهر' : reportSettings.dateRange === 'quarter' ? 'آخر 3 أشهر' : 'آخر سنة'})</span>
+                )}
+                {reportSettings.includeArchived && (
+                  <span> مع تضمين <span className="font-bold text-orange-600">{archivedCases.length}</span> قضية مؤرشفة</span>
+                )}
+                بصيغة <span className="font-bold text-green-600">{reportSettings.format.toUpperCase()}</span>
+                {reportSettings.autoPrint && (
+                  <span> مع طباعة تلقائية</span>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderUsersTab = () => (
+    <div className="space-y-6 animate-in fade-in">
+      <div className="flex justify-between items-center mb-4">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800 dark:text-white">إدارة المستخدمين والصلاحيات</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">تحكم في من يمكنه الوصول إلى النظام وما يمكنه فعله</p>
+        </div>
+        {!readOnly && (
+          <button 
+            onClick={openAddUser}
+            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> مستخدم جديد
+          </button>
+        )}
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <table className="w-full text-right">
+          <thead className="bg-slate-50 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs uppercase font-bold border-b border-slate-200 dark:border-slate-600">
+            <tr>
+              <th className="p-4">المستخدم</th>
+              <th className="p-4">اسم الدخول</th>
+              <th className="p-4">الدور الوظيفي</th>
+              <th className="p-4">الحالة</th>
+              <th className="p-4">آخر دخول</th>
+              <th className="p-4 text-center">الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+            {users.map(user => (
+              <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors dark:text-slate-200">
+                <td className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+                      {user.avatar ? <img src={user.avatar} className="w-full h-full rounded-full object-cover"/> : user.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-800 dark:text-white">{user.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>
+                    </div>
+                  </div>
+                </td>
+                <td className="p-4 font-mono text-slate-600 dark:text-slate-400 text-xs">
+                   {user.username || '-'}
+                </td>
+                <td className="p-4">
+                  <span className="bg-slate-100 dark:bg-slate-600 text-slate-600 dark:text-slate-300 px-2 py-1 rounded text-xs font-bold border border-slate-200 dark:border-slate-500">
+                    {user.roleLabel}
+                  </span>
+                </td>
+                <td className="p-4">
+                  <span className={`px-2 py-1 rounded-full text-xs font-bold ${user.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    {user.isActive ? 'نشط' : 'موقوف'}
+                  </span>
+                </td>
+                <td className="p-4 text-slate-500 dark:text-slate-400 font-mono text-xs">
+                  {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('ar-EG') : 'لم يدخل بعد'}
+                </td>
+                <td className="p-4">
+                  <div className="flex items-center justify-center gap-2">
+                    <button onClick={() => openEditUser(user)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg transition-colors" title="تعديل الصلاحيات">
+                      <Shield className="w-4 h-4" />
+                    </button>
+                    {onDeleteUser && !readOnly && (
+                      <button onClick={() => onDeleteUser(user.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors" title="حذف">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderSecurityTab = () => (
+    <div className="space-y-6 animate-in fade-in">
+       {/* Password Change Card */}
+       <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+             <Key className="w-5 h-5 text-indigo-600" /> تغيير كلمة المرور
+          </h4>
+          <form onSubmit={handlePasswordChange} className="max-w-md space-y-4">
+             <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">كلمة المرور الحالية</label>
+                <input 
+                  type="password" 
+                  required
+                  className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                  value={securityData.currentPassword}
+                  onChange={e => setSecurityData({...securityData, currentPassword: e.target.value})}
+                />
+             </div>
+             <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">كلمة المرور الجديدة</label>
+                <input 
+                  type="password" 
+                  required
+                  minLength={8}
+                  className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                  value={securityData.newPassword}
+                  onChange={e => setSecurityData({...securityData, newPassword: e.target.value})}
+                />
+             </div>
+             <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تأكيد كلمة المرور الجديدة</label>
+                <input 
+                  type="password" 
+                  required
+                  minLength={8}
+                  className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                  value={securityData.confirmPassword}
+                  onChange={e => setSecurityData({...securityData, confirmPassword: e.target.value})}
+                />
+             </div>
+             <button type="submit" disabled={isSaving} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-indigo-700 transition-colors w-full sm:w-auto flex justify-center items-center gap-2">
+                {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isSaving ? 'جاري التحديث...' : 'تحديث كلمة المرور'}
+             </button>
+          </form>
+       </div>
+
+       {/* 2FA Card */}
+       <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="flex justify-between items-center">
+             <div>
+                <h4 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                   <Shield className="w-5 h-5 text-green-600" /> المصادقة الثنائية (2FA)
+                </h4>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">تأمين الحساب عبر رمز يصل لهاتفك عند الدخول</p>
+             </div>
+             <label className="relative inline-flex items-center cursor-pointer">
+               <input type="checkbox" className="sr-only peer" checked={securityData.twoFactorEnabled} onChange={e => setSecurityData({...securityData, twoFactorEnabled: e.target.checked})} />
+               <div className="w-11 h-6 bg-gray-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+             </label>
+          </div>
+       </div>
+
+       {/* Active Sessions */}
+       <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <h4 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-3">
+             <Smartphone className="w-5 h-5 text-blue-600" /> الأجهزة المتصلة
+          </h4>
+          <div className="space-y-4">
+             <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                   <div className="bg-white dark:bg-slate-600 p-2 rounded-full text-slate-600 dark:text-slate-300">
+                      <Globe className="w-5 h-5" />
+                   </div>
+                   <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">Windows PC - Chrome</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">القاهرة، مصر • نشط الآن</p>
+                   </div>
+                </div>
+                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold">الحالية</span>
+             </div>
+             <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg opacity-75">
+                <div className="flex items-center gap-3">
+                   <div className="bg-white dark:bg-slate-600 p-2 rounded-full text-slate-600 dark:text-slate-300">
+                      <Smartphone className="w-5 h-5" />
+                   </div>
+                   <div>
+                      <p className="text-sm font-bold text-slate-800 dark:text-white">iPhone 13 - Safari</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">الجيزة، مصر • منذ 2 ساعة</p>
+                   </div>
+                </div>
+                <button className="text-xs text-red-600 hover:underline font-bold flex items-center gap-1">
+                   <LogOut className="w-3 h-3" /> تسجيل خروج
+                </button>
+             </div>
+          </div>
+       </div>
+    </div>
+  );
+
+  return (
+    <div className="flex flex-col lg:flex-row gap-6 min-h-[500px]">
+      {/* Sidebar */}
+      <div className="w-full lg:w-64 shrink-0">
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="p-4 bg-slate-50 dark:bg-slate-700 border-b border-slate-100 dark:border-slate-600">
+            <h2 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+              <SettingsIcon className="w-5 h-5 text-indigo-600" /> الإعدادات
+            </h2>
+          </div>
+          <nav className="p-2 space-y-1">
+            <button 
+              onClick={() => setActiveTab('general')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'general' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+            >
+              <SettingsIcon className="w-4 h-4" /> إعدادات عامة
+            </button>
+            <button 
+              onClick={() => setActiveTab('security')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'security' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+            >
+              <Lock className="w-4 h-4" /> الأمان
+            </button>
+            <button 
+              onClick={() => setActiveTab('users')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'users' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+            >
+              <Users className="w-4 h-4" /> المستخدمين والصلاحيات
+            </button>
+            <button 
+              onClick={() => setActiveTab('reports')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'reports' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+            >
+              <FileReport className="w-4 h-4" /> الطباعة والتقارير
+            </button>
+            <button 
+              onClick={() => setActiveTab('dataManagement')}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'dataManagement' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+            >
+              <Database className="w-4 h-4" /> إدارة البيانات المتقدمة
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1">
+        {activeTab === 'general' && renderGeneralTab()}
+        {activeTab === 'security' && renderSecurityTab()}
+        {activeTab === 'users' && renderUsersTab()}
+        {activeTab === 'reports' && renderReportsTab()}
+        {activeTab === 'dataManagement' && renderDataManagementTab()}
+      </div>
+
+      {/* User Modal (Add/Edit) */}
+      {isUserModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto flex flex-col animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800 dark:text-white">{editingUser ? 'تعديل مستخدم' : 'إضافة مستخدم جديد'}</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">قم بتعبئة البيانات وتحديد الصلاحيات بدقة</p>
+              </div>
+              <button onClick={() => setIsUserModalOpen(false)} className="text-slate-400 hover:text-red-500 transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUser} className="flex-1 overflow-y-auto p-6 space-y-8">
+              
+              {/* Basic Info Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-indigo-600 dark:text-indigo-400 border-b border-indigo-100 dark:border-indigo-900/50 pb-2 mb-4">بيانات الحساب</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الاسم الكامل <span className="text-red-500">*</span></label>
+                    <input 
+                      type="text" 
+                      required 
+                      className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                      value={formData.name}
+                      onChange={e => setFormData({...formData, name: e.target.value})}
+                      disabled={readOnly}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">البريد الإلكتروني <span className="text-red-500">*</span></label>
+                    <input 
+                      type="email" 
+                      required 
+                      className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                      dir="ltr"
+                      value={formData.email}
+                      onChange={e => setFormData({...formData, email: e.target.value})}
+                      disabled={readOnly}
+                    />
+                  </div>
+                  
+                  {/* Username & Password */}
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">اسم المستخدم (للدخول)</label>
+                    <input 
+                      type="text" 
+                      className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                      placeholder="اختياري (يمكن استخدام البريد)"
+                      value={formData.username || ''}
+                      onChange={e => setFormData({...formData, username: e.target.value})}
+                      disabled={readOnly}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                       كلمة المرور {editingUser ? <span className="text-xs text-slate-400 font-normal">(اتركها فارغة للإبقاء على الحالية)</span> : <span className="text-red-500">*</span>}
+                    </label>
+                    <div className="relative">
+                       <input 
+                         type="password" 
+                         className="w-full border p-2.5 pl-10 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                         placeholder={editingUser ? "••••••••" : "كلمة مرور جديدة"}
+                         required={!editingUser}
+                         value={formData.password || ''}
+                         onChange={e => setFormData({...formData, password: e.target.value})}
+                         disabled={readOnly}
+                       />
+                       <Key className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">المسمى الوظيفي</label>
+                    <input 
+                      type="text" 
+                      className="w-full border p-2.5 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                      placeholder="مثال: محامي استئناف"
+                      value={formData.roleLabel}
+                      onChange={e => setFormData({...formData, roleLabel: e.target.value})}
+                      disabled={readOnly}
+                    />
+                  </div>
+                  <div className="flex items-end pb-2">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <div className="relative">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer"
+                          checked={formData.isActive}
+                          onChange={e => setFormData({...formData, isActive: e.target.checked})}
+                          disabled={readOnly}
+                        />
+                        <div className="w-11 h-6 bg-gray-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                      </div>
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">حساب نشط</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Permissions Matrix Section */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-indigo-600 dark:text-indigo-400 border-b border-indigo-100 dark:border-indigo-900/50 pb-2 mb-4 flex items-center gap-2">
+                  <Shield className="w-4 h-4" /> جدول الصلاحيات
+                </h4>
+                
+                <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                  <div className="grid grid-cols-4 bg-slate-50 dark:bg-slate-900/50 p-3 text-xs font-bold text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+                    <div className="col-span-1">الصفحة / الوحدة</div>
+                    <div className="flex justify-center items-center gap-1"><Ban className="w-3 h-3 text-slate-400"/> لا يوجد صلاحية</div>
+                    <div className="flex justify-center items-center gap-1"><Eye className="w-3 h-3 text-blue-500"/> قراءة فقط</div>
+                    <div className="flex justify-center items-center gap-1"><Pencil className="w-3 h-3 text-green-500"/> تعديل وإدخال</div>
+                  </div>
+                  
+                  <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {MODULES.map(module => {
+                      const currentAccess = formData.permissions?.find(p => p.moduleId === module.id)?.access || 'none';
+                      
+                      return (
+                        <div key={module.id} className="grid grid-cols-4 p-3 items-center hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                          <div className="font-medium text-slate-800 dark:text-slate-200 text-sm">{module.label}</div>
+                          
+                          {/* Option: None */}
+                          <div className="flex justify-center">
+                            <label className="cursor-pointer p-2 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                              <input 
+                                type="radio" 
+                                name={`perm-${module.id}`} 
+                                checked={currentAccess === 'none'}
+                                onChange={() => handlePermissionChange(module.id, 'none')}
+                                className="sr-only"
+                                disabled={readOnly}
+                              />
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${currentAccess === 'none' ? 'border-slate-500 bg-slate-500 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                                {currentAccess === 'none' && <X className="w-3 h-3" />}
+                              </div>
+                            </label>
+                          </div>
+
+                          {/* Option: Read */}
+                          <div className="flex justify-center">
+                            <label className="cursor-pointer p-2 rounded hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
+                              <input 
+                                type="radio" 
+                                name={`perm-${module.id}`} 
+                                checked={currentAccess === 'read'}
+                                onChange={() => handlePermissionChange(module.id, 'read')}
+                                className="sr-only"
+                                disabled={readOnly}
+                              />
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${currentAccess === 'read' ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                                {currentAccess === 'read' && <Eye className="w-3 h-3" />}
+                              </div>
+                            </label>
+                          </div>
+
+                          {/* Option: Write */}
+                          <div className="flex justify-center">
+                            <label className="cursor-pointer p-2 rounded hover:bg-green-50 dark:hover:bg-green-900/30 transition-colors">
+                              <input 
+                                type="radio" 
+                                name={`perm-${module.id}`} 
+                                checked={currentAccess === 'write'}
+                                onChange={() => handlePermissionChange(module.id, 'write')}
+                                className="sr-only"
+                                disabled={readOnly}
+                              />
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${currentAccess === 'write' ? 'border-green-500 bg-green-500 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                                {currentAccess === 'write' && <Check className="w-3 h-3" />}
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+            </form>
+
+            <div className="p-5 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex gap-3 justify-end">
+              <button 
+                type="button" 
+                onClick={() => setIsUserModalOpen(false)}
+                className="px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                إلغاء
+              </button>
+              {!readOnly && (
+                <button 
+                  onClick={handleSaveUser}
+                  className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-md shadow-indigo-200 dark:shadow-none flex items-center gap-2 transition-colors"
+                >
+                  <Save className="w-4 h-4" /> حفظ المستخدم
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Settings;
