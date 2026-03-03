@@ -166,6 +166,12 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
 
   const handleWizardComplete = () => {
     if (editingHearing && onUpdateHearing) {
+      // Check if expenses are being added and if they were already recorded
+      const isAddingExpenses = expensesData.amount > 0 && 
+        (!editingHearing.expenses || 
+         editingHearing.expenses.amount !== expensesData.amount ||
+         editingHearing.expenses.description !== expensesData.description);
+      
       // 1. Update Current Hearing
       onUpdateHearing({
         ...editingHearing,

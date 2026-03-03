@@ -69,30 +69,22 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
   const stats = useMemo(() => {
     let totalAgreed = 0;
     let totalCollected = 0;
-    let totalCaseExpenses = 0;
-    let totalHearingExpenses = 0;
+    let totalExpenses = 0;
 
     cases.forEach(c => {
       if (c.finance) {
         totalAgreed += c.finance.agreedFees || 0;
         totalCollected += c.finance.paidAmount || 0;
-        totalCaseExpenses += c.finance.expenses || 0;
+        totalExpenses += c.finance.expenses || 0; // Hearing expenses are already included here
       }
     });
 
-    hearings.forEach(h => {
-      if (h.expenses && h.expenses.paidBy === 'lawyer') {
-        totalHearingExpenses += h.expenses.amount;
-      }
-    });
-
-    const totalExpenses = totalCaseExpenses + totalHearingExpenses;
     const totalPending = totalAgreed - totalCollected;
     const netIncome = totalCollected - totalExpenses;
     const collectionRate = totalAgreed > 0 ? Math.round((totalCollected / totalAgreed) * 100) : 0;
 
     return { totalAgreed, totalCollected, totalPending, totalExpenses, netIncome, collectionRate };
-  }, [cases, hearings]);
+  }, [cases]); // Remove hearings from dependencies
 
   // 2. Cases Financial List
   const casesFinancials = useMemo(() => {
@@ -124,35 +116,18 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
     });
   }, [cases, clients, searchTerm, filterStatus]);
 
-  // 3. Expenses List (Aggregated)
+  // 3. Expenses List (Aggregated) - Only from Case Finance History
   const expensesList = useMemo(() => {
     const list: any[] = [];
     
-    // A. Hearing Expenses
-    hearings.forEach(h => {
-      if (h.expenses && h.expenses.amount > 0) {
-        const c = cases.find(x => x.id === h.caseId);
-        list.push({
-          id: `h-${h.id}`,
-          date: h.date,
-          category: 'مصروفات جلسة',
-          description: h.expenses.description || 'مصروفات متنوعة',
-          amount: h.expenses.amount,
-          caseTitle: c?.title,
-          clientName: clients.find(cl => cl.id === c?.clientId)?.name,
-          paidBy: h.expenses.paidBy === 'lawyer' ? 'المكتب' : 'الموكل'
-        });
-      }
-    });
-
-    // B. Case Admin Expenses (from Transactions Log if available, else fallback)
+    // Only include expenses from case finance history (hearing expenses are already added there)
     cases.forEach(c => {
       if (c.finance?.history) {
          c.finance.history.filter(t => t.type === 'expense').forEach(t => {
             list.push({
                id: t.id,
                date: t.date,
-               category: t.category || 'إدارية',
+               category: t.category || (t.hearingId ? 'مصروفات جلسة' : 'إدارية'),
                description: t.description || 'مصروفات',
                amount: t.amount,
                caseTitle: c.title,
@@ -164,7 +139,7 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
     });
 
     return list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [cases, hearings, clients]);
+  }, [cases, clients]);
 
   // --- Handlers ---
 

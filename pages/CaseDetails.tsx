@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Case, Client, Hearing, CaseStatus, CaseDocument, FinancialTransaction, PaymentMethod, Lawyer } from '../types';
 import { ArrowRight, Edit3, Calendar, FileText, Briefcase, MapPin, User, Shield, Save, X, Activity, DollarSign, Clock, CheckCircle, AlertCircle, Phone, Gavel, MoreVertical, Plus, Upload, FileCheck, Eye, Trash2, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft, Calculator, Edit, Users, Cloud, Download } from 'lucide-react';
 import { googleDriveService } from '../services/googleDriveService';
@@ -20,12 +20,19 @@ interface CaseDetailsProps {
 }
 
 const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawyers, hearings, onBack, onAddHearing, onUpdateCase, onUpdateHearing, onDeleteHearing, onClientClick, readOnly = false }) => {
-  const currentCase = cases.find(c => c.id === caseId);
+  const currentCase = useMemo(() => cases.find(c => c.id === caseId), [cases, caseId]);
   const [activeTab, setActiveTab] = useState<'overview' | 'hearings' | 'documents' | 'finance'>('overview');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [isHearingModalOpen, setIsHearingModalOpen] = useState(false);
   const [editCaseData, setEditCaseData] = useState<Partial<Case>>({});
+  
+  // Update case data when cases prop changes
+  useEffect(() => {
+    if (currentCase) {
+      setEditCaseData(currentCase);
+    }
+  }, [currentCase]);
   // Opponent Edit State (Simulate primary opponent editing)
   const [editOpponentName, setEditOpponentName] = useState('');
   const [editOpponentLawyer, setEditOpponentLawyer] = useState('');

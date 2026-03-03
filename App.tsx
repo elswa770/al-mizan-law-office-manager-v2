@@ -510,8 +510,102 @@ function App() {
 
   const handleUpdateHearing = async (updatedHearing: Hearing) => {
     try {
+      // Update hearing first
       await updateHearing(updatedHearing.id, updatedHearing);
       setHearings(prev => prev.map(h => h.id === updatedHearing.id ? updatedHearing : h));
+      
+      // If the hearing has expenses, also update case expenses
+      if (updatedHearing.expenses && updatedHearing.caseId) {
+        console.log(`🔍 Processing hearing expenses for hearing ${updatedHearing.id}:`, updatedHearing.expenses);
+        
+        const targetCase = cases.find(c => c.id === updatedHearing.caseId);
+        if (targetCase) {
+          console.log(`📋 Found target case ${targetCase.id}:`, targetCase.finance);
+          
+          // Create a unique identifier for this expense record
+          const expenseIdentifier = `${updatedHearing.id}-${updatedHearing.expenses.amount}-${updatedHearing.expenses.description}`;
+          
+          // Check if this hearing expense was already recorded using multiple criteria
+          const existingExpense = targetCase.finance?.history?.find(
+            transaction => 
+              transaction.hearingId === updatedHearing.id && 
+              transaction.type === 'expense'
+          );
+          
+          // Check for exact match including amount and description
+          const exactMatch = targetCase.finance?.history?.find(
+            transaction => 
+              transaction.hearingId === updatedHearing.id && 
+              transaction.type === 'expense' &&
+              transaction.amount === updatedHearing.expenses.amount &&
+              transaction.description?.includes(updatedHearing.expenses.description)
+          );
+          
+          // Check for recent addition (within last 5 seconds) to prevent rapid duplicates
+          const recentAddition = targetCase.finance?.history?.find(
+            transaction => 
+              transaction.hearingId === updatedHearing.id && 
+              transaction.type === 'expense' &&
+              new Date(transaction.date).getTime() > (Date.now() - 5000)
+          );
+          
+          console.log(`🔍 Duplicate checks:`, {
+            existingExpense: !!existingExpense,
+            exactMatch: !!exactMatch,
+            recentAddition: !!recentAddition,
+            expenseIdentifier
+          });
+          
+          // Only add if not already recorded and not recently added
+          if (!existingExpense && !exactMatch && !recentAddition) {
+            console.log(`➕ Adding new expense to case ${updatedHearing.caseId}`);
+            
+            // Add hearing expenses to case finance.expenses
+            const updatedCase = {
+              ...targetCase,
+              finance: {
+                ...(targetCase.finance || {
+                  agreedFees: 0,
+                  paidAmount: 0,
+                  expenses: 0,
+                  history: []
+                }),
+                expenses: (targetCase.finance?.expenses || 0) + updatedHearing.expenses.amount,
+                history: [
+                  ...(targetCase.finance?.history || []),
+                  {
+                    id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+                    type: 'expense' as const,
+                    amount: updatedHearing.expenses.amount,
+                    description: `مصاريف الجلسة - ${updatedHearing.date}: ${updatedHearing.expenses.description}`,
+                    date: new Date().toISOString(), // Use current timestamp for better tracking
+                    paidBy: updatedHearing.expenses.paidBy,
+                    hearingId: updatedHearing.id,
+                    recordedBy: 'System'
+                  }
+                ]
+              }
+            };
+            
+            console.log(`💾 Updating case with new finance:`, updatedCase.finance);
+            
+            // Update case with new expenses
+            await updateCase(updatedHearing.caseId, updatedCase);
+            setCases(prev => prev.map(c => c.id === updatedHearing.caseId ? updatedCase : c));
+            
+            console.log(`✅ Added hearing expenses to case ${updatedHearing.caseId}:`, updatedHearing.expenses);
+            console.log(`🆔 Expense ID: ${updatedCase.finance.history[updatedCase.finance.history.length - 1].id}`);
+          } else {
+            console.log(`ℹ️ Hearing expenses already recorded for hearing ${updatedHearing.id}, skipping duplicate entry`);
+            console.log(`🔍 Existing expense:`, existingExpense || exactMatch || recentAddition);
+            console.log(`🆔 Expense identifier: ${expenseIdentifier}`);
+          }
+        } else {
+          console.log(`❌ Target case not found for caseId: ${updatedHearing.caseId}`);
+        }
+      } else {
+        console.log(`ℹ️ No expenses to process for hearing ${updatedHearing.id}`);
+      }
     } catch (err) {
       console.error('Error updating hearing:', err);
       setError('فشل في تحديث الجلسة');

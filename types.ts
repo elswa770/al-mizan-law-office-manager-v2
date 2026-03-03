@@ -229,6 +229,7 @@ export interface FinancialTransaction {
   category?: string;
   description?: string;
   recordedBy: string;
+  hearingId?: string; // Add optional hearingId field
 }
 
 export interface CaseFinance {
