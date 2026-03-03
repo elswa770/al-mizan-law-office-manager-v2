@@ -142,7 +142,6 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
           ...doc.data()
         } as ArchiveRequest));
         setRequests(requestsData);
-        console.log('Requests refreshed manually');
       } catch (error) {
         console.error('Error refreshing requests:', error);
       }
@@ -228,9 +227,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
         ...(parentId && { parentId })
       };
 
-      console.log('Adding location:', newLocation);
       const docRef = await addDoc(collection(db, 'archiveLocations'), newLocation);
-      console.log('Location added with ID:', docRef.id);
       
       // Update parent occupancy
       if (parentId) {

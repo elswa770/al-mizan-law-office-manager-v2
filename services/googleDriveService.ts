@@ -35,7 +35,6 @@ class GoogleDriveService {
     return new Promise((resolve, reject) => {
       // التحقق من وجود gapi مسبقاً
       if (window.gapi && window.gapi.client) {
-        console.log('Google API already initialized');
         this.gapiInited = true;
         this.gisInited = true;
         this.restoreToken(); // استعادة الـ token
@@ -47,10 +46,8 @@ class GoogleDriveService {
       const script = document.createElement('script');
       script.src = 'https://apis.google.com/js/api.js';
       script.onload = () => {
-        console.log('Google APIs script loaded');
         window.gapi.load('client', async () => {
           try {
-            console.log('Initializing Google API client...');
             
             // التحقق من وجود gapi.client قبل التهيئة
             if (!window.gapi.client) {
@@ -61,9 +58,6 @@ class GoogleDriveService {
               apiKey: this.config.apiKey,
               discoveryDocs: this.config.discoveryDocs,
             });
-            
-            console.log('Google API client initialized successfully');
-            console.log('Available APIs:', Object.keys(window.gapi.client));
             
             this.gapiInited = true;
             this.restoreToken(); // استعادة الـ token بعد التهيئة
@@ -86,7 +80,6 @@ class GoogleDriveService {
       const gisScript = document.createElement('script');
       gisScript.src = 'https://accounts.google.com/gsi/client';
       gisScript.onload = () => {
-        console.log('Google Identity Services loaded');
         this.tokenClient = google.accounts.oauth2.initTokenClient({
           client_id: this.config.clientId,
           scope: this.config.scope,
@@ -130,7 +123,6 @@ class GoogleDriveService {
       };
       
       localStorage.setItem('google_drive_token', JSON.stringify(tokenWithExpiry));
-      console.log('✅ Token saved to localStorage with expiry time');
     } catch (error) {
       console.error('❌ Failed to save token to localStorage:', error);
     }
@@ -143,7 +135,6 @@ class GoogleDriveService {
       if (savedToken) {
         const token = JSON.parse(savedToken);
         window.gapi.client.setToken(token);
-        console.log('✅ Token restored from localStorage');
       }
     } catch (error) {
       console.error('❌ Failed to restore token from localStorage:', error);
@@ -154,7 +145,6 @@ class GoogleDriveService {
   private clearToken(): void {
     try {
       localStorage.removeItem('google_drive_token');
-      console.log('✅ Token cleared from localStorage');
     } catch (error) {
       console.error('❌ Failed to clear token from localStorage:', error);
     }
@@ -171,7 +161,6 @@ class GoogleDriveService {
         if (tokenResponse && tokenResponse.access_token) {
           window.gapi.client.setToken(tokenResponse);
           this.saveToken(tokenResponse); // ✅ حفظ الـ token
-          console.log('✅ Sign-in successful, token saved');
           resolve();
         } else {
           reject(new Error('Failed to get access token'));
@@ -186,15 +175,12 @@ class GoogleDriveService {
 
   // إعادة المصادقة تلقائياً عند فشل الـ token
   async reauthenticate(): Promise<void> {
-    console.log('🔄 Re-authenticating with Google Drive...');
-    
     // مسح الـ token القديم
     this.clearToken();
     
     // محاولة تسجيل الدخول مرة أخرى
     try {
       await this.signIn();
-      console.log('✅ Re-authentication successful');
     } catch (error) {
       console.error('❌ Re-authentication failed:', error);
       throw error;
@@ -204,30 +190,15 @@ class GoogleDriveService {
   // رفع ملف إلى Google Drive
   async uploadFile(file: File, folderName?: string): Promise<UploadResponse> {
     try {
-      console.log('Starting file upload...');
-      console.log('File name:', file.name);
-      console.log('File size:', file.size);
-      console.log('File type:', file.type);
-      console.log('Folder name:', folderName);
-
-      // التحقق من تسجيل الدخول
+      // التحقق من حجم الملف (100MB كحد أقصى)
       const token = window.gapi.client.getToken();
       if (!token || !token.access_token) {
         throw new Error('لم يتم تسجيل الدخول. يرجى تسجيل الدخول إلى Google.');
-      }
-      
-      console.log('Access token exists:', !!token.access_token);
-
-      // التحقق من حجم الملف (100MB كحد أقصى)
-      if (file.size > 100 * 1024 * 1024) {
-        throw new Error('حجم الملف كبير جداً. الحد الأقصى هو 100MB.');
       }
 
       // إنشاء مجلدات منظمة
       let folderId = '';
       if (folderName) {
-        console.log('Creating organized folder structure...');
-        
         // إنشاء أو الحصول على مجلد المكتب الرئيسي
         const mainFolderId = await this.getOrCreateFolder('المكتب - الميزان');
         
@@ -249,15 +220,12 @@ class GoogleDriveService {
           folderId = await this.getOrCreateFolderInParent('مستندات عامة', mainFolderId);
         }
         
-        console.log('Final folder ID:', folderId);
       }
 
       const metadata = {
         name: file.name,
         parents: folderId ? [folderId] : undefined,
       };
-
-      console.log('Uploading with metadata:', metadata);
 
       const form = new FormData();
       form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
@@ -294,10 +262,8 @@ class GoogleDriveService {
       }
 
       const result = await response.json();
-      console.log('Upload successful:', result);
       
       // جعل الملف متاحاً للعامة (معطل مؤقتاً بسبب خطأ API)
-      console.log('Skipping makeFilePublic due to API initialization issues...');
       // await this.makeFilePublic(result.id); // معطل مؤقتاً
 
       return {
@@ -315,7 +281,6 @@ class GoogleDriveService {
   // البحث عن مجلد أو إنشاؤه
   private async getOrCreateFolder(folderName: string): Promise<string> {
     try {
-      console.log('Searching for folder:', folderName);
       
       const token = window.gapi.client.getToken();
       if (!token || !token.access_token) {

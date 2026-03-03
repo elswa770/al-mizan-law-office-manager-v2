@@ -1,13 +1,23 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { offlineManager } from './services/offlineManager';
 
-// Service Worker Registration
+// Enhanced Service Worker Registration
 const registerServiceWorker = async () => {
   if ('serviceWorker' in navigator) {
     try {
-      const registration = await navigator.serviceWorker.register('/sw.js');
-      console.log('SW registered: ', registration);
+      // Try to register the enhanced service worker first
+      let registration;
+      try {
+        registration = await navigator.serviceWorker.register('/sw-enhanced.js');
+        console.log('Enhanced SW registered: ', registration);
+      } catch (enhancedError) {
+        // Fallback to original service worker
+        console.warn('Enhanced SW failed, falling back to original:', enhancedError);
+        registration = await navigator.serviceWorker.register('/sw.js');
+        console.log('Original SW registered: ', registration);
+      }
 
       // Check for updates
       registration.addEventListener('updatefound', () => {
@@ -34,6 +44,9 @@ const registerServiceWorker = async () => {
           }
         }
       });
+
+      // Initialize offline manager (will initialize DB automatically)
+      console.log('Service worker and offline manager initialized');
 
     } catch (error) {
       console.log('SW registration failed: ', error);

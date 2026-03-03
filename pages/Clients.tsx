@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Client, Case, Hearing, ClientType, ClientStatus } from '../types';
 import { User, Phone, MapPin, Search, Plus, X, Save, Mail, FileText, Grid, List, Building2, Filter, Download, MessageCircle, ArrowUpRight, DollarSign, Calendar, FileSpreadsheet, Printer, AlertTriangle, ShieldAlert } from 'lucide-react';
 
@@ -19,6 +19,13 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [forceRerender, setForceRerender] = useState(0); // Force re-render for offline updates
+  
+  // Force re-render when clients change (for offline updates)
+  useEffect(() => {
+    console.log('🔄 Clients.tsx - Clients prop changed:', clients.length);
+    setForceRerender(prev => prev + 1);
+  }, [clients]);
   
   // Export Menu State
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -302,7 +309,7 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
         const poaWarning = getPOAWarningStatus(client);
         
         return (
-          <div key={client.id} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group relative overflow-hidden">
+          <div key={`${client.id}-${forceRerender}`} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group relative overflow-hidden">
              {/* Status Stripe */}
              <div className={`absolute top-0 left-0 w-1 h-full ${client.status === ClientStatus.ACTIVE ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
              
@@ -394,7 +401,7 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
              {filteredClients.map(client => {
                 const stats = getClientCaseStats(client.id);
                 return (
-                   <tr key={client.id} className="hover:bg-slate-50 dark:hover:bg-slate-700 group text-slate-800 dark:text-slate-200">
+                   <tr key={`${client.id}-${forceRerender}`} className="hover:bg-slate-50 dark:hover:bg-slate-700 group text-slate-800 dark:text-slate-200">
                       <td className="p-4 font-bold flex items-center gap-2">
                          {client.type === ClientType.COMPANY ? <Building2 className="w-4 h-4 text-slate-400"/> : <User className="w-4 h-4 text-slate-400"/>}
                          {client.name}

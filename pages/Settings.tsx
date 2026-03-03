@@ -168,7 +168,6 @@ const Settings: React.FC<SettingsProps> = ({
   const testSecurityFeature = (featureName: string, testFunction: () => boolean) => {
     try {
       const result = testFunction();
-      console.log(`✅ ${featureName} test: ${result ? 'PASSED' : 'FAILED'}`);
       return result;
     } catch (error) {
       console.error(`❌ ${featureName} test: ERROR`, error);
@@ -177,8 +176,6 @@ const Settings: React.FC<SettingsProps> = ({
   };
 
   const runSecurityTests = async () => {
-    console.log('🔐 Running Security Tests...');
-    
     const tests = [
       {
         name: 'Password Policy State',
@@ -252,8 +249,6 @@ const Settings: React.FC<SettingsProps> = ({
     const passed = results.filter(r => r.passed).length;
     const total = results.length;
     
-    console.log(`📊 Security Tests Summary: ${passed}/${total} passed`);
-    
     // Save test results to Firebase
     try {
       const authInstance = getAuth();
@@ -273,7 +268,6 @@ const Settings: React.FC<SettingsProps> = ({
         };
         
         await setDoc(doc(db, 'securityTestResults', testResults.id), testResults);
-        console.log('📝 Security test results saved to Firebase');
       }
     } catch (error) {
       console.error('Failed to save test results to Firebase:', error);
@@ -4024,23 +4018,18 @@ const Settings: React.FC<SettingsProps> = ({
       updatedPermissions.push({ moduleId, access });
     }
     
-    // Debug logging
-    console.log('Permission change:', { moduleId, access, updatedPermissions });
-    
     // Update form data with stable reference and prevent layout shifts
     setFormData(prev => {
       const newData = { 
         ...prev, 
         permissions: updatedPermissions 
       };
-      console.log('New formData:', newData);
       return newData;
     });
   };
 
-  // Add debugging and additional fixes to handlePermissionChange to prevent layout issues
+  // Additional fixes to handlePermissionChange to prevent layout issues
   const handlePermissionChangeFixed = (moduleId: string, access: PermissionLevel) => {
-    console.log('handlePermissionChangeFixed called with:', moduleId, access);
     try {
       // Create a new permissions array to avoid mutation
       const currentPermissions = formData.permissions || [];
@@ -4053,16 +4042,12 @@ const Settings: React.FC<SettingsProps> = ({
         updatedPermissions.push({ moduleId, access });
       }
       
-      // Debug logging
-      console.log('Permission change:', { moduleId, access, updatedPermissions });
-      
       // Update form data with stable reference and prevent layout shifts
       setFormData(prev => {
         const newData = { 
           ...prev, 
           permissions: updatedPermissions 
         };
-        console.log('New formData:', newData);
         return newData;
       });
     } catch (error) {

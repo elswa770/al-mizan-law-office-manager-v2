@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Case, Client, CaseStatus, CourtType, LawBranch, Lawyer, Hearing } from '../types';
 import { Briefcase, Search, Plus, Filter, User, Calendar, MapPin, ArrowUpRight, X, Save, Gavel, LayoutGrid, List, Users, Scale, AlertTriangle } from 'lucide-react';
 
@@ -21,6 +21,13 @@ const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCase
   const [lawyerFilter, setLawyerFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [forceRerender, setForceRerender] = useState(0); // Force re-render for offline updates
+  
+  // Force re-render when cases change (for offline updates)
+  useEffect(() => {
+    console.log('🔄 Cases.tsx - Cases prop changed:', cases.length);
+    setForceRerender(prev => prev + 1);
+  }, [cases]);
   
   // New Case Form State
   const [formData, setFormData] = useState<Partial<Case>>({
@@ -124,7 +131,7 @@ const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCase
         const opponent = c.opponents && c.opponents.length > 0 ? c.opponents[0] : null;
         const nextHearing = hearings.find(h => h.caseId === c.id && new Date(h.date) >= new Date(new Date().setHours(0,0,0,0)));
         return (
-          <div key={c.id} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group overflow-hidden flex flex-col relative">
+          <div key={`${c.id}-${forceRerender}`} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group overflow-hidden flex flex-col relative">
             <div className={`h-1.5 w-full ${
               c.status === CaseStatus.OPEN ? 'bg-green-500' :
               c.status === CaseStatus.CLOSED ? 'bg-slate-400' : 'bg-amber-500'
@@ -222,7 +229,7 @@ const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCase
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
             {filteredCases.map(c => (
-              <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-800 dark:text-slate-200 group">
+              <tr key={`${c.id}-${forceRerender}`} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors text-slate-800 dark:text-slate-200 group">
                 <td className="p-4">
                   <div className="flex items-start gap-3">
                     <div className={`mt-1.5 w-2 h-2 rounded-full shrink-0 ${

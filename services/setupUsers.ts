@@ -36,7 +36,6 @@ export const createAdminUser = async (): Promise<void> => {
 
   try {
     await setDoc(doc(db, 'users', adminUid), adminUser);
-    console.log('Admin user created successfully');
   } catch (error) {
     console.error('Error creating admin user:', error);
   }
@@ -103,7 +102,6 @@ export const createSampleUsers = async (): Promise<void> => {
     for (const user of sampleUsers) {
       await setDoc(doc(db, 'users', user.id), user);
     }
-    console.log('Sample users created successfully');
   } catch (error) {
     console.error('Error creating sample users:', error);
   }

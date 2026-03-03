@@ -72,14 +72,11 @@ class WhatsAppNotificationService {
   // Send WhatsApp message
   private async sendWhatsAppMessage(to: string, message: string): Promise<boolean> {
     if (!this.settings?.whatsappEnabled || !this.settings?.whatsappApiKey) {
-      console.log('WhatsApp not enabled or not configured');
       return false;
     }
 
     try {
       // In production, this would be the actual Twilio API call
-      console.log(`📱 Sending WhatsApp to ${to}: ${message}`);
-      
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000));
       
@@ -116,7 +113,6 @@ class WhatsAppNotificationService {
 
     const clientWhatsApp = await this.getClientWhatsAppNumber(hearing.caseId);
     if (!clientWhatsApp) {
-      console.log(`No WhatsApp number found for case ${hearing.caseId}`);
       return;
     }
 

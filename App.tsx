@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, lazy, Suspense, useCallback } from 'react';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { Lawyer, LawyerStatus, LawyerSpecialization, LawyerRole } from './types';
 import { createLawyer, updateLawyer, deleteLawyer, getLawyers } from './services/dbservice';
@@ -25,7 +25,6 @@ const LegalReferences = lazy(() => import('./pages/LegalReferences'));
 const Calculators = lazy(() => import('./pages/Calculators'));
 const Archive = lazy(() => import('./pages/Archive'));
 import { Hearing, Case, Client, HearingStatus, Task, ActivityLog, AppUser, PermissionLevel, LegalReference } from './types';
-import { auth } from './services/firebaseConfig';
 import { ShieldAlert } from 'lucide-react';
 import { 
   getClients, addClient, updateClient, deleteClient,
@@ -40,10 +39,11 @@ import {
   loginUser, 
   logoutUser, 
   onAuthStateChange, 
-  getUserProfile, 
+  getUserProfile,
   AuthUser 
 } from './services/authService';
-import { db } from './services/firebaseConfig';
+import { auth, db } from './services/firebaseConfig';
+import { offlineManager } from './services/offlineManager';
 
 // Helper function for default permissions
 const getDefaultPermissions = () => [
@@ -92,6 +92,8 @@ function App() {
   const [references, setReferences] = useState<LegalReference[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [forceUpdate, setForceUpdate] = useState(0); // Force re-render
+  const [refreshKey, setRefreshKey] = useState(0); // Additional force re-render key
 
   // --- Load General Settings from Firebase ---
   const [generalSettings, setGeneralSettings] = useState<any>(null);
@@ -110,7 +112,7 @@ function App() {
           }
         }
       } catch (error) {
-        console.log('Failed to load general settings from Firebase:', error);
+        // Failed to load general settings from Firebase
       }
     };
 
@@ -135,6 +137,8 @@ function App() {
         
         // Load user profile from Firestore
         try {
+          // Use dynamic import to avoid caching issues
+          const { getUserProfile } = await import('./services/authService');
           const userProfile = await getUserProfile(user.uid);
           if (userProfile) {
             setCurrentUser(userProfile);
@@ -213,45 +217,191 @@ function App() {
       setError(null);
       
       try {
-        console.log('🔄 App.tsx - Starting data load for user:', currentUser?.email || 'Unknown');
+        let casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData;
         
-        const [
-          casesData,
-          hearingsData,
-          clientsData,
-          tasksData,
-          activitiesData,
-          usersData,
-          lawyersData
-        ] = await Promise.all([
-          getCases(),
-          getHearings(),
-          getClients(),
-          getTasks(),
-          getActivities(),
-          getAppUsers(),
-          getLawyers()
-        ]);
+        if (navigator.onLine) {
+          // Online: Load from Firebase
+          [casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData] = await Promise.all([
+            getCases(),
+            getHearings(),
+            getClients(),
+            getTasks(),
+            getActivities(),
+            getAppUsers(),
+            getLawyers()
+          ]);
+          
+          // Cache the data for offline use
+          await Promise.all([
+            offlineManager.cacheData('cases', casesData),
+            offlineManager.cacheData('clients', clientsData),
+            offlineManager.cacheData('hearings', hearingsData),
+            offlineManager.cacheData('tasks', tasksData)
+          ]);
+        } else {
+          // Offline: Load from cache
+          [casesData, clientsData, hearingsData, tasksData] = await Promise.all([
+            offlineManager.getCachedData('cases'),
+            offlineManager.getCachedData('clients'),
+            offlineManager.getCachedData('hearings'),
+            offlineManager.getCachedData('tasks')
+          ]);
+          
+          activitiesData = [];
+          usersData = [];
+          lawyersData = [];
+        }
         
-        setCases(casesData);
-        setHearings(hearingsData);
-        setClients(clientsData);
-        setTasks(tasksData);
-        setActivities(activitiesData);
-        setUsers(usersData);
-        setLawyers(lawyersData);
+        setCases(casesData || []);
+        setHearings(hearingsData || []);
+        setClients(clientsData || []);
+        setTasks(tasksData || []);
+        setActivities(activitiesData || []);
+        setUsers(usersData || []);
+        setLawyers(lawyersData || []);
         // References will be loaded separately in LegalReferences page
         setReferences([]);
         
       } catch (err) {
         console.error('Error loading data:', err);
-        setError('فشل في تحميل البيانات من قاعدة البيانات');
+        
+        // Try to load from cache if online loading fails
+        if (navigator.onLine) {
+          try {
+            const [casesData, clientsData, hearingsData, tasksData] = await Promise.all([
+              offlineManager.getCachedData('cases'),
+              offlineManager.getCachedData('clients'),
+              offlineManager.getCachedData('hearings'),
+              offlineManager.getCachedData('tasks')
+            ]);
+            
+            setCases(casesData || []);
+            setClients(clientsData || []);
+            setHearings(hearingsData || []);
+            setTasks(tasksData || []);
+            setActivities([]);
+            setUsers([]);
+            setLawyers([]);
+            setReferences([]);
+            
+            setError('تم تحميل البيانات من التخزين المؤقت (وضع عدم الاتصال)');
+          } catch (cacheError) {
+            setError('فشل في تحميل البيانات من قاعدة البيانات والتخزين المؤقت');
+          }
+        } else {
+          setError('فشل في تحميل البيانات من قاعدة البيانات');
+        }
       } finally {
         setLoading(false);
       }
     };
     
     loadData();
+  }, [isAuthenticated, currentUser]);
+
+  // --- Network Status Listener ---
+  useEffect(() => {
+    const handleOnline = async () => {
+      console.log('🌐 Connection restored, syncing data...');
+      
+      // Sync pending actions
+      try {
+        await offlineManager.syncPendingActions();
+        console.log('✅ Pending actions synced successfully');
+      } catch (error) {
+        console.error('❌ Failed to sync pending actions:', error);
+      }
+      
+      // Reload data from server
+      if (isAuthenticated && currentUser) {
+        try {
+          const [serverCasesData, serverClientsData, serverHearingsData, serverTasksData] = await Promise.all([
+            getCases(),
+            getClients(),
+            getHearings(),
+            getTasks()
+          ]);
+          
+          // Merge server data with local offline changes
+          console.log('🔄 Merging server data with local changes...');
+          
+          // For cases, merge local changes with server data
+          const mergedCases = serverCasesData.map(serverCase => {
+            const localCase = cases.find(c => c.id === serverCase.id);
+            if (localCase && localCase.id !== serverCase.id) {
+              // This is a locally created case that was synced
+              return { ...serverCase, ...localCase };
+            }
+            return serverCase;
+          });
+          
+          // Add any local cases that aren't on server yet
+          const localOnlyCases = cases.filter(localCase => 
+            !serverCasesData.some(serverCase => serverCase.id === localCase.id)
+          );
+          
+          const finalCases = [...mergedCases, ...localOnlyCases];
+          
+          console.log('📊 Final cases data:', finalCases);
+          setCases(finalCases);
+          setClients(serverClientsData);
+          setHearings(serverHearingsData);
+          setTasks(serverTasksData);
+          
+          // Cache merged data
+          await Promise.all([
+            offlineManager.cacheData('cases', finalCases),
+            offlineManager.cacheData('clients', serverClientsData),
+            offlineManager.cacheData('hearings', serverHearingsData),
+            offlineManager.cacheData('tasks', serverTasksData)
+          ]);
+          
+          console.log('✅ Data synced and merged successfully');
+        } catch (error) {
+          console.error('❌ Failed to sync data:', error);
+        }
+      }
+      
+      // Force update to refresh UI
+      setForceUpdate(prev => prev + 1);
+    };
+
+    const handleOffline = () => {
+      console.log('📱 Connection lost, switching to offline mode');
+      // Force update to refresh UI
+      setForceUpdate(prev => prev + 1);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Check connection status periodically for more responsive updates
+    const checkConnection = async () => {
+      try {
+        // Try to fetch a small resource to check real connectivity
+        const response = await fetch('https://www.google.com/images/cleardot.gif', {
+          method: 'HEAD',
+          mode: 'no-cors',
+          cache: 'no-cache',
+          signal: AbortSignal.timeout(2000) // 2 second timeout
+        });
+        
+        // If we get here, we have some form of connectivity
+        const currentStatus = navigator.onLine;
+        console.log('🔍 Connection check:', currentStatus ? 'Online' : 'Offline');
+      } catch (error) {
+        // Network error - definitely offline
+        console.log('🔍 Connection check: Offline (network error)');
+      }
+    };
+
+    const interval = setInterval(checkConnection, 5000); // Check every 5 seconds
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
+    };
   }, [isAuthenticated, currentUser]);
 
   // --- Auth Handlers ---
@@ -365,7 +515,6 @@ function App() {
       
       // Update local state
       setLawyers(prev => [...prev, newLawyer]);
-      console.log('Lawyer added to Firebase:', newLawyer);
     } catch (error) {
       console.error('Error adding lawyer to Firebase:', error);
     }
@@ -378,7 +527,6 @@ function App() {
       
       // Update local state
       setLawyers(prev => prev.map(l => l.id === lawyer.id ? lawyer : l));
-      console.log('Lawyer updated in Firebase:', lawyer);
     } catch (error) {
       console.error('Error updating lawyer in Firebase:', error);
     }
@@ -391,7 +539,6 @@ function App() {
       
       // Update local state
       setLawyers(prev => prev.filter(l => l.id !== lawyerId));
-      console.log('Lawyer deleted from Firebase:', lawyerId);
     } catch (error) {
       console.error('Error deleting lawyer from Firebase:', error);
     }
@@ -399,8 +546,6 @@ function App() {
 
   const handleAddCase = async (newCase: Omit<Case, 'id'>) => {
     try {
-      console.log('🆕 App.tsx - handleAddCase called with:', newCase);
-      
       // التحقق من عدم وجود القضية مسبقاً (باستخدام caseNumber و title)
       const existingCase = cases.find(c => 
         c.caseNumber === newCase.caseNumber && 
@@ -419,17 +564,66 @@ function App() {
           (lawyers.find(l => l.id === newCase.assignedLawyerId)?.name || '') : ''
       };
 
-      const caseId = await addCase(caseData);
-      console.log('✅ App.tsx - Case added with ID:', caseId);
+      // Check if online and try to save to Firebase
+      if (navigator.onLine) {
+        try {
+          const caseId = await addCase(caseData);
+          
+          // إضافة القضية الجديدة إلى الحالة المحلية مع الـ ID الصحيح
+          setCases(prev => {
+            const updatedCases = [...prev, { ...caseData, id: caseId }];
+            return updatedCases;
+          });
+          
+          // Cache the updated data
+          await offlineManager.cacheData('cases', [...cases, { ...caseData, id: caseId }]);
+          
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving offline:', error);
+          
+          // Save to offline queue if Firebase fails
+          const tempId = `temp_${Date.now()}`;
+          setCases(prev => {
+            const updatedCases = [...prev, { ...caseData, id: tempId }];
+            return updatedCases;
+          });
+          
+          await offlineManager.addPendingAction({
+            type: 'create',
+            entity: 'case',
+            data: caseData
+          });
+        }
+      } else {
+        // Offline mode - save locally and add to queue
+        console.log('📱 App.tsx - Offline mode, saving case locally');
+        const tempId = `temp_${Date.now()}`;
+        
+        // Update local state first
+        const newCase = { ...caseData, id: tempId };
+        const updatedCases = [...cases, newCase];
+        
+        console.log('📱 App.tsx - New case to add:', newCase);
+        console.log('📱 App.tsx - Updated cases array:', updatedCases);
+        
+        setCases([...updatedCases]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        await offlineManager.addPendingAction({
+          type: 'create',
+          entity: 'case',
+          data: caseData
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('cases', updatedCases);
+        console.log('📱 App.tsx - Case added and cached successfully');
+      }
       
-      // إضافة القضية الجديدة إلى الحالة المحلية مع الـ ID الصحيح
-      setCases(prev => {
-        const updatedCases = [...prev, { ...caseData, id: caseId }];
-        console.log('📝 App.tsx - Updated cases array after add:', updatedCases);
-        return updatedCases;
-      });
-      
-      // Log activity
+      // Log activity (works offline too)
       await handleAddActivity({
         action: 'إضافة قضية جديدة',
         target: newCase.title,
@@ -443,58 +637,177 @@ function App() {
 
   const handleUpdateCase = async (updatedCase: Case) => {
     try {
-      console.log('🔄 App.tsx - handleUpdateCase called with:', updatedCase);
-      
       // التحقق من وجود id
       if (!updatedCase.id) {
         console.error('❌ App.tsx - Case ID is missing:', updatedCase);
         setError('لا يمكن تحديث قضية بدون معرف');
         return;
       }
-      
-      // تحديث في Firebase
-      await updateCase(updatedCase.id, updatedCase);
-      console.log('✅ App.tsx - Firebase update successful');
-      
-      // تحديث الحالة المحلية بشكل صحيح
-      setCases(prev => {
-        const updatedCases = prev.map(c => {
+
+      // Check if online and try to update in Firebase
+      if (navigator.onLine) {
+        try {
+          // تحديث في Firebase
+          await updateCase(updatedCase.id, updatedCase);
+          
+          // تحديث الحالة المحلية بشكل صحيح
+          setCases(prev => {
+            const updatedCases = prev.map(c => {
+              if (c.id === updatedCase.id) {
+                // دمج البيانات بدلاً من الاستبدال الكامل
+                return { ...c, ...updatedCase };
+              }
+              return c;
+            });
+            return updatedCases;
+          });
+          
+          // Cache the updated data
+          await offlineManager.cacheData('cases', cases.map(c => 
+            c.id === updatedCase.id ? { ...c, ...updatedCase } : c
+          ));
+          
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving update offline:', error);
+          
+          // Save update to offline queue if Firebase fails
+          setCases(prev => {
+            const updatedCases = prev.map(c => {
+              if (c.id === updatedCase.id) {
+                return { ...c, ...updatedCase };
+              }
+              return c;
+            });
+            return updatedCases;
+          });
+          
+          await offlineManager.addPendingAction({
+            type: 'update',
+            entity: 'case',
+            data: updatedCase
+          });
+        }
+      } else {
+        // Offline mode - save locally and add to queue
+        console.log('📱 App.tsx - Offline mode, updating case locally');
+        console.log('📱 App.tsx - Case to update:', updatedCase);
+        console.log('📱 App.tsx - Current cases before update:', cases);
+        
+        // Update local state first
+        const updatedCases = cases.map(c => {
           if (c.id === updatedCase.id) {
-            // دمج البيانات بدلاً من الاستبدال الكامل
+            console.log('📱 App.tsx - Found case to update:', c);
+            console.log('📱 App.tsx - Updated case will be:', { ...c, ...updatedCase });
             return { ...c, ...updatedCase };
           }
           return c;
         });
-        console.log('📝 App.tsx - Updated cases array:', updatedCases);
-        return updatedCases;
-      });
+        
+        console.log('📱 App.tsx - Updated cases array:', updatedCases);
+        console.log('📱 App.tsx - Setting cases with new data...');
+        
+        // Force update with new array reference
+        setCases([...updatedCases]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        // Verify the update happened
+        setTimeout(() => {
+          console.log('📱 App.tsx - Cases after setCases:', cases);
+        }, 100);
+        
+        await offlineManager.addPendingAction({
+          type: 'update',
+          entity: 'case',
+          data: updatedCase
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('cases', updatedCases);
+        console.log('📱 App.tsx - Case updated and cached successfully');
+      }
       
-      // Log activity
+      // Log activity (works offline too)
       await handleAddActivity({
         action: 'تعديل بيانات القضية',
         target: updatedCase.title,
         user: currentUser?.name || 'مستخدم',
         timestamp: new Date().toISOString()
       });
+      
     } catch (err) {
-      console.error('Error updating case:', err);
+      console.error('❌ App.tsx - Error updating case:', err);
       setError('فشل في تحديث القضية');
     }
   };
 
   const handleAddHearing = async (newHearing: Hearing) => {
     try {
-      // إضافة اسم المحامي إذا تم اختياره
-      const hearingData = {
-        ...newHearing,
-        assignedLawyerName: newHearing.assignedLawyerId ? 
-          (lawyers.find(l => l.id === newHearing.assignedLawyerId)?.name || '') : ''
-      };
+      // Check if online and try to update in Firebase
+      if (navigator.onLine) {
+        try {
+          // إضافة اسم المحامي إذا تم اختياره
+          const hearingData = {
+            ...newHearing,
+            assignedLawyerName: newHearing.assignedLawyerId ? 
+              (lawyers.find(l => l.id === newHearing.assignedLawyerId)?.name || '') : ''
+          };
 
-      const hearingId = await addHearing(hearingData);
-      setHearings(prev => [{ ...hearingData, id: hearingId }, ...prev]);
+          const hearingId = await addHearing(hearingData);
+          setHearings(prev => [{ ...hearingData, id: hearingId }, ...prev]);
+          
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving hearing offline:', error);
+          
+          // Save to offline queue if Firebase fails
+          const tempId = `temp_${Date.now()}`;
+          setHearings(prev => [{ ...hearingData, id: tempId }, ...prev]);
+          
+          await offlineManager.addPendingAction({
+            type: 'create',
+            entity: 'hearing',
+            data: newHearing
+          });
+        }
+      } else {
+        // Offline mode - save locally and add to queue
+        console.log('📱 App.tsx - Offline mode, adding hearing locally');
+        console.log('📱 App.tsx - Hearing to add:', newHearing);
+        console.log('📱 App.tsx - Current hearings before add:', hearings);
+        
+        // Update local state first
+        const tempId = `temp_${Date.now()}`;
+        const newHearingWithId = { ...newHearing, id: tempId };
+        const updatedHearings = [...hearings, newHearingWithId];
+        
+        console.log('📱 App.tsx - New hearing with ID:', newHearingWithId);
+        console.log('📱 App.tsx - Updated hearings array:', updatedHearings);
+        
+        setHearings([...updatedHearings]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        // Verify the addition happened
+        setTimeout(() => {
+          console.log('📱 App.tsx - Hearings after setHearings:', hearings);
+        }, 100);
+        
+        await offlineManager.addPendingAction({
+          type: 'create',
+          entity: 'hearing',
+          data: newHearing
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('hearings', updatedHearings);
+        console.log('📱 App.tsx - Hearing added and cached successfully');
+      }
       
-      // Log activity
+      // Log activity (works offline too)
       const caseTitle = cases.find(c => c.id === newHearing.caseId)?.title || 'قضية غير معروفة';
       await handleAddActivity({
         action: 'إضافة جلسة جديدة',
@@ -516,11 +829,8 @@ function App() {
       
       // If the hearing has expenses, also update case expenses
       if (updatedHearing.expenses && updatedHearing.caseId) {
-        console.log(`🔍 Processing hearing expenses for hearing ${updatedHearing.id}:`, updatedHearing.expenses);
-        
         const targetCase = cases.find(c => c.id === updatedHearing.caseId);
         if (targetCase) {
-          console.log(`📋 Found target case ${targetCase.id}:`, targetCase.finance);
           
           // Create a unique identifier for this expense record
           const expenseIdentifier = `${updatedHearing.id}-${updatedHearing.expenses.amount}-${updatedHearing.expenses.description}`;
@@ -549,17 +859,8 @@ function App() {
               new Date(transaction.date).getTime() > (Date.now() - 5000)
           );
           
-          console.log(`🔍 Duplicate checks:`, {
-            existingExpense: !!existingExpense,
-            exactMatch: !!exactMatch,
-            recentAddition: !!recentAddition,
-            expenseIdentifier
-          });
-          
           // Only add if not already recorded and not recently added
           if (!existingExpense && !exactMatch && !recentAddition) {
-            console.log(`➕ Adding new expense to case ${updatedHearing.caseId}`);
-            
             // Add hearing expenses to case finance.expenses
             const updatedCase = {
               ...targetCase,
@@ -587,24 +888,17 @@ function App() {
               }
             };
             
-            console.log(`💾 Updating case with new finance:`, updatedCase.finance);
-            
             // Update case with new expenses
             await updateCase(updatedHearing.caseId, updatedCase);
             setCases(prev => prev.map(c => c.id === updatedHearing.caseId ? updatedCase : c));
-            
-            console.log(`✅ Added hearing expenses to case ${updatedHearing.caseId}:`, updatedHearing.expenses);
-            console.log(`🆔 Expense ID: ${updatedCase.finance.history[updatedCase.finance.history.length - 1].id}`);
           } else {
-            console.log(`ℹ️ Hearing expenses already recorded for hearing ${updatedHearing.id}, skipping duplicate entry`);
-            console.log(`🔍 Existing expense:`, existingExpense || exactMatch || recentAddition);
-            console.log(`🆔 Expense identifier: ${expenseIdentifier}`);
+            // Hearing expenses already recorded, skipping duplicate entry
           }
         } else {
-          console.log(`❌ Target case not found for caseId: ${updatedHearing.caseId}`);
+          // Target case not found
         }
       } else {
-        console.log(`ℹ️ No expenses to process for hearing ${updatedHearing.id}`);
+        // No expenses to process for this hearing
       }
     } catch (err) {
       console.error('Error updating hearing:', err);
@@ -666,8 +960,6 @@ function App() {
 
   const handleUpdateClient = async (updatedClient: Client) => {
     try {
-      console.log('🔄 App.tsx - handleUpdateClient called with:', updatedClient);
-      
       // التحقق من وجود id
       if (!updatedClient.id) {
         console.error('❌ App.tsx - Client ID is missing:', updatedClient);
@@ -675,24 +967,87 @@ function App() {
         return;
       }
       
-      // تحديث في Firebase
-      await updateClient(updatedClient.id, updatedClient);
-      console.log('✅ App.tsx - Firebase update successful');
-      
-      // تحديث الحالة المحلية بشكل صحيح
-      setClients(prev => {
-        const updatedClients = prev.map(c => {
+      // Check if online and try to update in Firebase
+      if (navigator.onLine) {
+        try {
+          // تحديث في Firebase
+          await updateClient(updatedClient.id, updatedClient);
+          
+          // تحديث الحالة المحلية بشكل صحيح
+          setClients(prev => {
+            const updatedClients = prev.map(c => {
+              if (c.id === updatedClient.id) {
+                // دمج البيانات بدلاً من الاستبدال الكامل
+                return { ...c, ...updatedClient };
+              }
+              return c;
+            });
+            return updatedClients;
+          });
+          
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving update offline:', error);
+          
+          // Save update to offline queue if Firebase fails
+          setClients(prev => {
+            const updatedClients = prev.map(c => {
+              if (c.id === updatedClient.id) {
+                return { ...c, ...updatedClient };
+              }
+              return c;
+            });
+            return updatedClients;
+          });
+          
+          await offlineManager.addPendingAction({
+            type: 'update',
+            entity: 'client',
+            data: updatedClient
+          });
+        }
+      } else {
+        // Offline mode - save locally and add to queue
+        console.log('📱 App.tsx - Offline mode, updating client locally');
+        console.log('📱 App.tsx - Client to update:', updatedClient);
+        console.log('📱 App.tsx - Current clients before update:', clients);
+        
+        // Update local state first
+        const updatedClients = clients.map(c => {
           if (c.id === updatedClient.id) {
-            // دمج البيانات بدلاً من الاستبدال الكامل
+            console.log('📱 App.tsx - Found client to update:', c);
+            console.log('📱 App.tsx - Updated client will be:', { ...c, ...updatedClient });
             return { ...c, ...updatedClient };
           }
           return c;
         });
-        console.log('📝 App.tsx - Updated clients array:', updatedClients);
-        return updatedClients;
-      });
+        
+        console.log('📱 App.tsx - Updated clients array:', updatedClients);
+        console.log('📱 App.tsx - Setting clients with new data...');
+        
+        // Force update with new array reference
+        setClients([...updatedClients]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        // Verify the update happened
+        setTimeout(() => {
+          console.log('📱 App.tsx - Clients after setClients:', clients);
+        }, 100);
+        
+        await offlineManager.addPendingAction({
+          type: 'update',
+          entity: 'client',
+          data: updatedClient
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('clients', updatedClients);
+        console.log('📱 App.tsx - Client updated and cached successfully');
+      }
       
-      // Log activity
+      // Log activity (works offline too)
       await handleAddActivity({
         action: 'تعديل بيانات الموكل',
         target: updatedClient.name,
@@ -1048,6 +1403,7 @@ function App() {
         />;
       case 'cases':
         return <Cases 
+          key={`cases-${forceUpdate}-${refreshKey}`}
           cases={cases}
           clients={clients}
           lawyers={lawyers}
@@ -1058,6 +1414,7 @@ function App() {
         />;
         case 'clients':
         return <Clients 
+          key={`clients-${forceUpdate}-${refreshKey}`}
           clients={clients} 
           cases={cases}
           hearings={hearings}
@@ -1090,6 +1447,7 @@ function App() {
         />;
       case 'documents':
         return <Documents 
+          key={`documents-${forceUpdate}-${refreshKey}`}
           cases={cases} 
           clients={clients}
           onCaseClick={handleCaseClick}
@@ -1099,7 +1457,8 @@ function App() {
           readOnly={isReadOnly('documents')}
         />;
       case 'fees':
-        return <Fees 
+        return <Cases 
+          key={`cases-${forceUpdate}`}
           cases={cases} 
           clients={clients} 
           hearings={hearings}
@@ -1107,7 +1466,6 @@ function App() {
           onAddActivity={handleAddActivity}
           canViewIncome={hasAccess('fees')}
           canViewExpenses={hasAccess('expenses')}
-          readOnly={isReadOnly('fees') && isReadOnly('expenses')}
         />;
       case 'reports':
         return <Reports 
@@ -1124,6 +1482,7 @@ function App() {
             </div>
           }>
             <AIAssistant 
+              key={`ai-assistant-${forceUpdate}-${refreshKey}`}
               cases={cases}
               references={references}
               hearings={hearings}
@@ -1224,6 +1583,7 @@ function App() {
             </div>
           }>
             <Archive 
+              key={`archive-${forceUpdate}-${refreshKey}`}
               cases={cases}
               clients={clients}
               onUpdateCase={handleUpdateCase}
@@ -1235,6 +1595,7 @@ function App() {
       case 'case-details':
         if (!selectedCaseId) return <Dashboard cases={cases} clients={clients} hearings={hearings} />;
         return <CaseDetails 
+              key={`case-details-${forceUpdate}-${refreshKey}`}
               caseId={selectedCaseId}
               cases={cases}
               clients={clients}

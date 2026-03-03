@@ -64,15 +64,9 @@ export const addClient = async (client: Omit<Client, 'id'>): Promise<string> => 
 };
 
 export const updateClient = async (id: string, client: Partial<Client>) => {
-  console.log('🔥 dbService.ts - updateClient called with id:', id);
-  console.log('🔥 dbService.ts - updateClient called with client:', client);
-  
   // فحص المستندات بشكل خاص
   if (client.documents) {
-    console.log('📄 Documents array found:', client.documents);
     client.documents.forEach((doc, index) => {
-      console.log(`📄 Document ${index}:`, doc);
-      console.log(`📄 Document ${index} keys:`, Object.keys(doc));
       Object.entries(doc).forEach(([key, value]) => {
         if (value === undefined) {
           console.error(`❌ Found undefined in document ${index}, key: ${key}`);
@@ -87,20 +81,15 @@ export const updateClient = async (id: string, client: Partial<Client>) => {
   // تنظيف الحقول undefined قبل إرسالها إلى Firebase
   const cleanClient = cleanObject(clientWithoutId);
   
-  console.log('🧹 dbService.ts - Cleaned client:', cleanClient);
-  
   // التحقق النهائي
   const hasUndefined = Object.values(cleanClient).some(val => val === undefined);
-  console.log('🚨 dbService.ts - Has undefined values:', hasUndefined);
   if (hasUndefined) {
     console.error('❌ dbService.ts ERROR: Still has undefined values!', cleanClient);
     throw new Error('Cannot update client with undefined values');
   }
   
   const docRef = doc(db, "clients", id);
-  console.log('📤 dbService.ts - Sending to Firebase:', cleanClient);
   await updateDoc(docRef, cleanClient);
-  console.log('✅ dbService.ts - Firebase update successful');
 };
 
 export const deleteClient = async (id: string) => {
@@ -114,15 +103,10 @@ export const getCases = async (): Promise<Case[]> => {
 };
 
 export const addCase = async (caseData: Omit<Case, 'id'>): Promise<string> => {
-  console.log('📤 dbService.ts - Adding case with data:', caseData);
-  
   // تنظيف الحقول undefined قبل إرسالها إلى Firebase
   const cleanCaseData = cleanObject(caseData);
-  console.log('🧹 dbService.ts - Cleaned case data:', cleanCaseData);
   
   const docRef = await addDoc(collection(db, "cases"), cleanCaseData);
-  console.log('✅ dbService.ts - Case added with Firebase ID:', docRef.id);
-  console.log('🔗 dbService.ts - Document path:', docRef.path);
   
   return docRef.id;
 };

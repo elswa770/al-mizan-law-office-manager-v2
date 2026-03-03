@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { LayoutDashboard, Briefcase, Users, Gavel, FileText, BrainCircuit, LogOut, Menu, Bell, Calendar, X, Clock, AlertTriangle, CheckCircle, ChevronRight, ChevronLeft, Settings, BarChart3, Wallet, File, Search, Library, PlusCircle, Shield, CheckSquare, Map, Calculator, PenTool, Archive } from 'lucide-react';
 import { AppUser } from '../types';
 import { AuthUser } from '../services/authService';
+import OfflineStatus from './OfflineStatus';
 
 interface NotificationItem {
   id: string;
@@ -426,6 +427,9 @@ const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notif
                <Search className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
                <input type="text" placeholder="بحث عام (قضية، موكل، مستند)..." className="pl-4 pr-9 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl text-sm w-72 focus:ring-2 focus:ring-primary-500 transition-all dark:text-white" />
             </div>
+
+            {/* Offline Status */}
+            <OfflineStatus className="hidden md:block" />
 
             {/* Notifications Bell */}
             <div className="relative" ref={notificationRef}>
