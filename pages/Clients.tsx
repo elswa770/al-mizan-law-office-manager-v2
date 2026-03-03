@@ -68,6 +68,33 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
     };
   };
 
+  // Check for expiring POA (Power of Attorney)
+  const getPOAWarningStatus = (client: Client) => {
+    if (!client.poaExpiry) return null;
+    
+    const today = new Date();
+    const expiryDate = new Date(client.poaExpiry);
+    const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysUntilExpiry < 0) {
+      return {
+        type: 'expired',
+        message: 'انتهى التوكيل',
+        daysLeft: Math.abs(daysUntilExpiry),
+        color: 'red'
+      };
+    } else if (daysUntilExpiry <= 30) {
+      return {
+        type: 'warning',
+        message: `ينتهي التوكيل خلال ${daysUntilExpiry} يوم`,
+        daysLeft: daysUntilExpiry,
+        color: daysUntilExpiry <= 7 ? 'red' : 'amber'
+      };
+    }
+    
+    return null;
+  };
+
   const filteredClients = clients.filter(c => {
     const matchesSearch = c.name.includes(searchTerm) || c.nationalId.includes(searchTerm) || c.phone.includes(searchTerm);
     const matchesType = filterType === 'all' || c.type === filterType;
@@ -272,12 +299,23 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
       {filteredClients.map(client => {
         const stats = getClientCaseStats(client.id);
         const hasDues = stats.totalDues > 0;
+        const poaWarning = getPOAWarningStatus(client);
         
         return (
           <div key={client.id} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group relative overflow-hidden">
              {/* Status Stripe */}
              <div className={`absolute top-0 left-0 w-1 h-full ${client.status === ClientStatus.ACTIVE ? 'bg-green-500' : 'bg-slate-300 dark:bg-slate-600'}`}></div>
              
+             {/* POA Warning Ribbon */}
+             {poaWarning && (
+                <div className="absolute top-0 right-0 w-20 h-20 overflow-hidden">
+                   <div className={`absolute top-2 right-[-35px] w-[140px] text-center py-1 ${poaWarning.color === 'red' ? 'bg-red-600' : 'bg-amber-600'} text-white text-[10px] font-bold transform rotate-45 shadow-lg`}>
+                      {poaWarning.type === 'expired' ? 'منتهي' : `${poaWarning.daysLeft} يوم`}
+                   </div>
+                </div>
+             )}
+             
+                          
              <div className="p-5 pl-7">
                 {/* Header */}
                 <div className="flex justify-between items-start mb-4">
@@ -636,5 +674,4 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
     </div>
   );
 };
-
 export default Clients;
