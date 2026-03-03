@@ -208,16 +208,12 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
         newFinance: newFinance
       });
 
-      // Only update case if explicitly requested or if this is the first financial transaction
-      const shouldUpdateCase = !targetCase.finance || targetCase.finance.history.length === 0;
-      
-      if (shouldUpdateCase) {
-        console.log('Updating case with new finance:', newFinance);
-        onUpdateCase({
-          ...targetCase,
-          finance: newFinance
-        });
-      }
+      // Always update the case with new financial data
+      console.log('Updating case with new finance:', newFinance);
+      onUpdateCase({
+        ...targetCase,
+        finance: newFinance
+      });
 
       // Log activity
       const actionType = transactionData.type === 'payment' ? 'تسجيل معاملة دفع' : 'تسجيل مصروفات';
