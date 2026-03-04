@@ -29,7 +29,7 @@ import { ShieldAlert } from 'lucide-react';
 import { 
   getClients, addClient, updateClient, deleteClient,
   getCases, addCase, updateCase,
-  getHearings, addHearing, updateHearing,
+  getHearings, addHearing, updateHearing, deleteHearing,
   getTasks, addTask, updateTask, deleteTask,
   getAppUsers, addAppUser, updateAppUser, deleteAppUser,
   getActivities, addActivity,
@@ -94,6 +94,27 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [forceUpdate, setForceUpdate] = useState(0); // Force re-render
   const [refreshKey, setRefreshKey] = useState(0); // Additional force re-render key
+
+  // --- Network Status Helper ---
+  const checkNetworkConnectivity = async (): Promise<boolean> => {
+    try {
+      // First check navigator.onLine
+      if (!navigator.onLine) return false;
+      
+      // Then try to fetch a small resource to verify real connectivity
+      const response = await fetch('https://www.google.com/images/cleardot.gif', {
+        method: 'HEAD',
+        mode: 'no-cors',
+        cache: 'no-cache',
+        signal: AbortSignal.timeout(2000) // 2 second timeout
+      });
+      
+      return true; // If we get here, we have connectivity
+    } catch (error) {
+      console.log('🔍 Network connectivity check failed:', error);
+      return false;
+    }
+  };
 
   // --- Load General Settings from Firebase ---
   const [generalSettings, setGeneralSettings] = useState<any>(null);
@@ -401,6 +422,39 @@ function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
       clearInterval(interval);
+    };
+  }, [isAuthenticated, currentUser]);
+
+  // --- Sync Completion Listener ---
+  useEffect(() => {
+    const handleSyncCompleted = async (event: CustomEvent) => {
+      console.log('🔄 Sync completed event received:', event.detail);
+      
+      // Reload cached data to get updated IDs
+      if (isAuthenticated && currentUser) {
+        try {
+          const cachedHearings = await offlineManager.getCachedData('hearings');
+          console.log('📱 Updated hearings from cache after sync:', cachedHearings);
+          
+          // Update local state with cached data (which now has real Firebase IDs)
+          setHearings(cachedHearings);
+          
+          // Force UI update
+          setForceUpdate(prev => prev + 1);
+          setRefreshKey(prev => prev + 1);
+          
+          console.log('✅ Local state updated with synced data');
+        } catch (error) {
+          console.error('❌ Failed to update local state after sync:', error);
+        }
+      }
+    };
+
+    // Add event listener for sync completion
+    window.addEventListener('offlineSyncCompleted', handleSyncCompleted as EventListener);
+
+    return () => {
+      window.removeEventListener('offlineSyncCompleted', handleSyncCompleted as EventListener);
     };
   }, [isAuthenticated, currentUser]);
 
@@ -745,44 +799,74 @@ function App() {
 
   const handleAddHearing = async (newHearing: Hearing) => {
     try {
-      // Check if online and try to update in Firebase
-      if (navigator.onLine) {
-        try {
-          // إضافة اسم المحامي إذا تم اختياره
-          const hearingData = {
-            ...newHearing,
-            assignedLawyerName: newHearing.assignedLawyerId ? 
-              (lawyers.find(l => l.id === newHearing.assignedLawyerId)?.name || '') : ''
-          };
+      // التحقق من عدم وجود الجلسة مسبقاً (لمنع التكرار)
+      const existingHearing = hearings.find(h => 
+        h.caseId === newHearing.caseId && 
+        h.date === newHearing.date && 
+        h.time === newHearing.time
+      );
+      
+      if (existingHearing) {
+        console.warn('⚠️ App.tsx - Hearing already exists:', existingHearing);
+        setError('هذه الجلسة موجودة بالفعل');
+        return;
+      }
 
+      // إضافة اسم المحامي إذا تم اختياره
+      const hearingData = {
+        ...newHearing,
+        assignedLawyerName: newHearing.assignedLawyerId ? 
+          (lawyers.find(l => l.id === newHearing.assignedLawyerId)?.name || '') : ''
+      };
+
+      // Check if online and try to save to Firebase
+      const isOnline = await checkNetworkConnectivity();
+      
+      if (isOnline) {
+        try {
+          console.log('🌐 App.tsx - Online mode, saving hearing to Firebase');
           const hearingId = await addHearing(hearingData);
-          setHearings(prev => [{ ...hearingData, id: hearingId }, ...prev]);
+          
+          // إضافة الجلسة الجديدة إلى الحالة المحلية مع الـ ID الصحيح
+          setHearings(prev => {
+            const updatedHearings = [{ ...hearingData, id: hearingId }, ...prev];
+            return updatedHearings;
+          });
+          
+          // Cache the updated data
+          await offlineManager.cacheData('hearings', [{ ...hearingData, id: hearingId }, ...hearings]);
           
         } catch (error) {
           console.error('❌ App.tsx - Firebase error, saving hearing offline:', error);
           
           // Save to offline queue if Firebase fails
-          const tempId = `temp_${Date.now()}`;
-          setHearings(prev => [{ ...hearingData, id: tempId }, ...prev]);
+          const tempId = `temp_hearing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          const hearingWithTempId = { ...hearingData, id: tempId };
+          
+          setHearings(prev => {
+            const updatedHearings = [hearingWithTempId, ...prev];
+            return updatedHearings;
+          });
           
           await offlineManager.addPendingAction({
             type: 'create',
             entity: 'hearing',
-            data: newHearing
+            data: hearingData
           });
+          
+          // Cache locally with temp ID
+          await offlineManager.cacheData('hearings', [hearingWithTempId, ...hearings]);
         }
       } else {
         // Offline mode - save locally and add to queue
-        console.log('📱 App.tsx - Offline mode, adding hearing locally');
-        console.log('📱 App.tsx - Hearing to add:', newHearing);
-        console.log('📱 App.tsx - Current hearings before add:', hearings);
+        console.log('📱 App.tsx - Offline mode, saving hearing locally');
+        const tempId = `temp_hearing_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const hearingWithTempId = { ...hearingData, id: tempId };
         
         // Update local state first
-        const tempId = `temp_${Date.now()}`;
-        const newHearingWithId = { ...newHearing, id: tempId };
-        const updatedHearings = [...hearings, newHearingWithId];
+        const updatedHearings = [hearingWithTempId, ...hearings];
         
-        console.log('📱 App.tsx - New hearing with ID:', newHearingWithId);
+        console.log('📱 App.tsx - New hearing to add:', hearingWithTempId);
         console.log('📱 App.tsx - Updated hearings array:', updatedHearings);
         
         setHearings([...updatedHearings]);
@@ -791,15 +875,10 @@ function App() {
         setForceUpdate(prev => prev + 1);
         setRefreshKey(prev => prev + 1); // Additional force re-render
         
-        // Verify the addition happened
-        setTimeout(() => {
-          console.log('📱 App.tsx - Hearings after setHearings:', hearings);
-        }, 100);
-        
         await offlineManager.addPendingAction({
           type: 'create',
           entity: 'hearing',
-          data: newHearing
+          data: hearingData
         });
         
         // Cache locally with updated data
@@ -815,49 +894,76 @@ function App() {
         user: currentUser?.name || 'مستخدم',
         timestamp: new Date().toISOString()
       });
-    } catch (err) {
-      console.error('Error adding hearing:', err);
+      
+    } catch (error) {
+      console.error('❌ App.tsx - Error adding hearing:', error);
       setError('فشل في إضافة الجلسة');
     }
   };
 
   const handleUpdateHearing = async (updatedHearing: Hearing) => {
     try {
+      // التحقق من وجود ID
+      if (!updatedHearing.id) {
+        console.error('❌ App.tsx - Hearing ID is missing:', updatedHearing);
+        setError('لا يمكن تحديث جلسة بدون معرف');
+        return;
+      }
+
+      // التحقق من وجود الجلسة
+      const existingHearing = hearings.find(h => h.id === updatedHearing.id);
+      if (!existingHearing) {
+        console.error('❌ App.tsx - Hearing not found:', updatedHearing.id);
+        setError('الجلسة غير موجودة');
+        return;
+      }
+
+      // إضافة اسم المحامي إذا تم اختياره
+      const hearingData = {
+        ...updatedHearing,
+        assignedLawyerName: updatedHearing.assignedLawyerId ? 
+          (lawyers.find(l => l.id === updatedHearing.assignedLawyerId)?.name || '') : ''
+      };
+
       // Check if online and try to update in Firebase
-      if (navigator.onLine) {
+      const isOnline = await checkNetworkConnectivity();
+      
+      if (isOnline) {
         try {
+          console.log('🌐 App.tsx - Online mode, updating hearing in Firebase');
           // Update hearing first
-          await updateHearing(updatedHearing.id, updatedHearing);
-          setHearings(prev => prev.map(h => h.id === updatedHearing.id ? updatedHearing : h));
+          await updateHearing(updatedHearing.id, hearingData);
+          const updatedHearings = hearings.map(h => h.id === updatedHearing.id ? hearingData : h);
+          setHearings(updatedHearings);
           
           // If the hearing has expenses, also update case expenses
-          if (updatedHearing.expenses && updatedHearing.caseId) {
-            const targetCase = cases.find(c => c.id === updatedHearing.caseId);
+          if (hearingData.expenses && hearingData.expenses.amount > 0 && hearingData.caseId) {
+            const targetCase = cases.find(c => c.id === hearingData.caseId);
             if (targetCase) {
               
               // Create a unique identifier for this expense record
-              const expenseIdentifier = `${updatedHearing.id}-${updatedHearing.expenses.amount}-${updatedHearing.expenses.description}`;
+              const expenseIdentifier = `${hearingData.id}-${hearingData.expenses.amount}-${hearingData.expenses.description}`;
               
               // Check if this hearing expense was already recorded using multiple criteria
               const existingExpense = targetCase.finance?.history?.find(
                 transaction => 
-                  transaction.hearingId === updatedHearing.id && 
+                  transaction.hearingId === hearingData.id && 
                   transaction.type === 'expense'
               );
               
               // Check for exact match including amount and description
               const exactMatch = targetCase.finance?.history?.find(
                 transaction => 
-                  transaction.hearingId === updatedHearing.id && 
+                  transaction.hearingId === hearingData.id && 
                   transaction.type === 'expense' &&
-                  transaction.amount === updatedHearing.expenses.amount &&
-                  transaction.description?.includes(updatedHearing.expenses.description)
+                  transaction.amount === hearingData.expenses.amount &&
+                  transaction.description?.includes(hearingData.expenses.description)
               );
               
               // Check for recent addition (within last 5 seconds) to prevent rapid duplicates
               const recentAddition = targetCase.finance?.history?.find(
                 transaction => 
-                  transaction.hearingId === updatedHearing.id && 
+                  transaction.hearingId === hearingData.id && 
                   transaction.type === 'expense' &&
                   new Date(transaction.date).getTime() > (Date.now() - 5000)
               );
@@ -874,17 +980,17 @@ function App() {
                       expenses: 0,
                       history: []
                     }),
-                    expenses: (targetCase.finance?.expenses || 0) + updatedHearing.expenses.amount,
+                    expenses: (targetCase.finance?.expenses || 0) + hearingData.expenses.amount,
                     history: [
                       ...(targetCase.finance?.history || []),
                       {
                         id: `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
                         type: 'expense' as const,
-                        amount: updatedHearing.expenses.amount,
-                        description: `مصاريف الجلسة - ${updatedHearing.date}: ${updatedHearing.expenses.description}`,
+                        amount: hearingData.expenses.amount,
+                        description: `مصاريف الجلسة - ${hearingData.date}: ${hearingData.expenses.description}`,
                         date: new Date().toISOString(), // Use current timestamp for better tracking
-                        paidBy: updatedHearing.expenses.paidBy,
-                        hearingId: updatedHearing.id,
+                        paidBy: hearingData.expenses.paidBy,
+                        hearingId: hearingData.id,
                         recordedBy: 'System'
                       }
                     ]
@@ -892,48 +998,52 @@ function App() {
                 };
                 
                 // Update case with new expenses
-                await updateCase(updatedHearing.caseId, updatedCase);
-                setCases(prev => prev.map(c => c.id === updatedHearing.caseId ? updatedCase : c));
+                await updateCase(hearingData.caseId, updatedCase);
+                setCases(prev => prev.map(c => c.id === hearingData.caseId ? updatedCase : c));
               } else {
                 // Hearing expenses already recorded, skipping duplicate entry
+                console.log('💰 App.tsx - Hearing expenses already recorded, skipping duplicate');
               }
             } else {
               // Target case not found
+              console.warn('⚠️ App.tsx - Target case not found for hearing expenses');
             }
           } else {
             // No expenses to process for this hearing
+            console.log('💰 App.tsx - No expenses to process for this hearing');
           }
           
           // Cache the updated data
-          await offlineManager.cacheData('hearings', hearings.map(h => h.id === updatedHearing.id ? updatedHearing : h));
+          await offlineManager.cacheData('hearings', updatedHearings);
           
         } catch (error) {
           console.error('❌ App.tsx - Firebase error, saving hearing update offline:', error);
           
           // Save update to offline queue if Firebase fails
-          setHearings(prev => prev.map(h => h.id === updatedHearing.id ? updatedHearing : h));
+          const updatedHearings = hearings.map(h => h.id === updatedHearing.id ? hearingData : h);
+          setHearings(updatedHearings);
           
           await offlineManager.addPendingAction({
             type: 'update',
             entity: 'hearing',
-            data: updatedHearing
+            data: hearingData
           });
           
           // Cache locally with updated data
-          await offlineManager.cacheData('hearings', hearings.map(h => h.id === updatedHearing.id ? updatedHearing : h));
+          await offlineManager.cacheData('hearings', updatedHearings);
         }
       } else {
         // Offline mode - save locally and add to queue
         console.log('📱 App.tsx - Offline mode, updating hearing locally');
-        console.log('📱 App.tsx - Hearing to update:', updatedHearing);
+        console.log('📱 App.tsx - Hearing to update:', hearingData);
         console.log('📱 App.tsx - Current hearings before update:', hearings);
         
         // Update local state first
         const updatedHearings = hearings.map(h => {
           if (h.id === updatedHearing.id) {
             console.log('📱 App.tsx - Found hearing to update:', h);
-            console.log('📱 App.tsx - Updated hearing will be:', updatedHearing);
-            return updatedHearing;
+            console.log('📱 App.tsx - Updated hearing will be:', hearingData);
+            return hearingData;
           }
           return h;
         });
@@ -956,7 +1066,7 @@ function App() {
         await offlineManager.addPendingAction({
           type: 'update',
           entity: 'hearing',
-          data: updatedHearing
+          data: hearingData
         });
         
         // Cache locally with updated data
@@ -981,20 +1091,37 @@ function App() {
 
   const handleDeleteHearing = async (hearingId: string) => {
     try {
+      // التحقق من وجود الجلسة
+      const hearingToDelete = hearings.find(h => h.id === hearingId);
+      if (!hearingToDelete) {
+        console.error('❌ App.tsx - Hearing not found for deletion:', hearingId);
+        setError('الجلسة غير موجودة');
+        return;
+      }
+
+      // Get real ID if this is a temp ID
+      const realId = offlineManager.getRealId(hearingId);
+      console.log(`🗑️ App.tsx - Deleting hearing with ID: ${hearingId} (real: ${realId})`);
+
       // Check if online and try to delete from Firebase
-      if (navigator.onLine) {
+      const isOnline = await checkNetworkConnectivity();
+      
+      if (isOnline) {
         try {
-          await deleteDoc(doc(db, 'hearings', hearingId));
-          setHearings(prev => prev.filter(h => h.id !== hearingId));
+          console.log('🌐 App.tsx - Online mode, deleting hearing from Firebase');
+          await deleteHearing(realId);
+          const updatedHearings = hearings.filter(h => h.id !== hearingId);
+          setHearings(updatedHearings);
           
           // Cache the updated data
-          await offlineManager.cacheData('hearings', hearings.filter(h => h.id !== hearingId));
+          await offlineManager.cacheData('hearings', updatedHearings);
           
         } catch (error) {
           console.error('❌ App.tsx - Firebase error, saving hearing deletion offline:', error);
           
           // Save deletion to offline queue if Firebase fails
-          setHearings(prev => prev.filter(h => h.id !== hearingId));
+          const updatedHearings = hearings.filter(h => h.id !== hearingId);
+          setHearings(updatedHearings);
           
           await offlineManager.addPendingAction({
             type: 'delete',
@@ -1003,7 +1130,7 @@ function App() {
           });
           
           // Cache locally with updated data
-          await offlineManager.cacheData('hearings', hearings.filter(h => h.id !== hearingId));
+          await offlineManager.cacheData('hearings', updatedHearings);
         }
       } else {
         // Offline mode - save locally and add to queue
@@ -1041,16 +1168,14 @@ function App() {
       }
       
       // Log activity (works offline too)
-      const hearing = hearings.find(h => h.id === hearingId);
-      if (hearing) {
-        const caseTitle = cases.find(c => c.id === hearing.caseId)?.title || 'قضية غير معروفة';
-        await handleAddActivity({
-          action: 'حذف جلسة',
-          target: `${hearing.date} - ${caseTitle}`,
-          user: currentUser?.name || 'مستخدم',
-          timestamp: new Date().toISOString()
-        });
-      }
+      const caseTitle = cases.find(c => c.id === hearingToDelete.caseId)?.title || 'قضية غير معروفة';
+      await handleAddActivity({
+        action: 'حذف جلسة',
+        target: `${hearingToDelete.date} - ${caseTitle}`,
+        user: currentUser?.name || 'مستخدم',
+        timestamp: new Date().toISOString()
+      });
+      
     } catch (error) {
       console.error('❌ App.tsx - Error deleting hearing:', error);
       setError('فشل في حذف الجلسة');

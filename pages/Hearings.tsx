@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { Case, Hearing, CaseStatus, HearingStatus, Lawyer } from '../types';
-import { Calendar, MapPin, Gavel, AlertCircle, X, Edit3, Link as LinkIcon, ExternalLink, ChevronLeft, ChevronRight, List, LayoutGrid, Clock, Filter, Printer, Download, Plus, CheckSquare, AlignJustify, DollarSign, CalendarDays, ArrowLeftCircle, CheckCircle, FileText, Upload, Image as ImageIcon, Eye, Trash2 } from 'lucide-react';
+import { Calendar, MapPin, Gavel, AlertCircle, X, Edit3, Link as LinkIcon, ExternalLink, ChevronLeft, ChevronRight, List, LayoutGrid, Clock, Filter, Printer, Download, Plus, CheckSquare, AlignJustify, DollarSign, CalendarDays, ArrowLeftCircle, CheckCircle, FileText, Upload, Image as ImageIcon, Eye, Trash2, Wifi, WifiOff, Cloud, CloudOff, RefreshCw } from 'lucide-react';
+import { useOfflineStatus, useOfflineActions } from '../hooks/useOfflineStatus';
 
 interface HearingsProps {
   hearings: Hearing[];
@@ -15,10 +16,32 @@ interface HearingsProps {
 }
 
 const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseClick, onUpdateHearing, onAddHearing, onDeleteHearing, readOnly = false }) => {
+  // --- Offline Status ---
+  const offlineStatus = useOfflineStatus();
+  const { isOnline, syncNow } = useOfflineActions();
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // --- View State ---
   const [viewMode, setViewMode] = useState<'timeline' | 'table' | 'calendar'>('timeline');
   const [filterType, setFilterType] = useState<'upcoming' | 'past' | 'today'>('upcoming');
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+  
+  // --- Sync Handler ---
+  const handleSyncNow = async () => {
+    if (!isOnline) return;
+    
+    setIsSyncing(true);
+    try {
+      const success = await syncNow();
+      if (success) {
+        console.log('✅ Hearings synced successfully');
+      }
+    } catch (error) {
+      console.error('❌ Sync failed:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
   
   // Delete Hearing Handler
   const handleDeleteHearing = (hearingId: string) => {
@@ -521,6 +544,37 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
 
             {/* Actions */}
             <div className="flex items-center gap-2 w-full lg:w-auto">
+               {/* Offline Status & Sync */}
+               <div className="flex items-center gap-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 px-3 py-2 rounded-lg shadow-sm">
+                 {isOnline ? (
+                   <div className="flex items-center gap-2">
+                     <Wifi className="w-4 h-4 text-green-500" />
+                     <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">متصل</span>
+                     {offlineStatus?.pendingActions && offlineStatus.pendingActions > 0 && (
+                       <button
+                         onClick={handleSyncNow}
+                         disabled={isSyncing}
+                         className="flex items-center gap-1 bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-2 py-1 rounded text-xs font-bold transition-colors"
+                         title="مزامنة الآن"
+                       >
+                         <RefreshCw className={`w-3 h-3 ${isSyncing ? 'animate-spin' : ''}`} />
+                         {offlineStatus.pendingActions}
+                       </button>
+                     )}
+                   </div>
+                 ) : (
+                   <div className="flex items-center gap-2">
+                     <WifiOff className="w-4 h-4 text-red-500" />
+                     <span className="text-xs text-slate-600 dark:text-slate-300 font-medium">غير متصل</span>
+                     {offlineStatus?.pendingActions && offlineStatus.pendingActions > 0 && (
+                       <span className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded text-xs font-bold">
+                         {offlineStatus.pendingActions} معلق
+                       </span>
+                     )}
+                   </div>
+                 )}
+               </div>
+               
                <button onClick={handleExportPDF} className="flex items-center gap-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors shadow-sm hidden sm:flex" title="طباعة">
                   <Printer className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                   <span>طباعة</span>

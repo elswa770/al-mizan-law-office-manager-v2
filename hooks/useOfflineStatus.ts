@@ -29,9 +29,18 @@ export const useOfflineActions = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
-    const handleOnline = () => {
+    const handleOnline = async () => {
       console.log('🌐 Network connection restored');
       setIsOnline(true);
+      
+      // Auto-sync when coming back online
+      try {
+        console.log('🔄 Auto-syncing pending actions...');
+        await offlineManager.syncPendingActions();
+        console.log('✅ Auto-sync completed');
+      } catch (error) {
+        console.error('❌ Auto-sync failed:', error);
+      }
     };
     const handleOffline = () => {
       console.log('📱 Network connection lost');
@@ -55,7 +64,25 @@ export const useOfflineActions = () => {
         // If we get here, we have some form of connectivity
         const online = navigator.onLine;
         console.log('🔍 Connection check:', online ? 'Online' : 'Offline');
+        
+        // Always update state first
         setIsOnline(online);
+        
+        // If we're online, check if there are pending actions before syncing
+        if (online) {
+          try {
+            const status = await offlineManager.getOfflineStatus();
+            if (status && status.pendingActions && status.pendingActions > 0) {
+              console.log('🔄 Connection detected - Auto-syncing pending actions...');
+              await offlineManager.syncPendingActions();
+              console.log('✅ Auto-sync completed');
+            } else {
+              console.log('ℹ️ No pending actions to sync');
+            }
+          } catch (error) {
+            console.error('❌ Auto-sync failed:', error);
+          }
+        }
       } catch (error) {
         // Network error - definitely offline
         console.log('🔍 Connection check: Offline (network error)');

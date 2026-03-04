@@ -29,6 +29,7 @@ class OfflineManager {
   private cacheName = 'al-mizan-offline-data';
   private syncInProgress = false;
   private listeners: ((status: OfflineStatus) => void)[] = [];
+  private tempIdMap: Map<string, string> = new Map(); // tempId -> realId mapping
 
   constructor() {
     this.initDB();
@@ -201,38 +202,73 @@ class OfflineManager {
     if (this.syncInProgress || !navigator.onLine) return;
 
     this.syncInProgress = true;
-    console.log('Starting sync of pending actions');
+    console.log('Starting sync of pending actions...');
 
     try {
       const actions = await this.getPendingActions();
-      
+      console.log(`Found ${actions.length} pending actions to sync`);
+
       for (const action of actions) {
         try {
           await this.executeAction(action);
           await this.removePendingAction(action.id);
           await this.logSyncAction(action, 'success');
         } catch (error) {
-          console.error('Failed to sync action:', action, error);
-          await this.logSyncAction(action, 'failed', error);
+          console.error(`Failed to sync action ${action.id}:`, error);
+          action.retryCount = (action.retryCount || 0) + 1;
           
-          // Update retry count
-          action.retryCount++;
           if (action.retryCount < 3) {
             await this.updatePendingAction(action);
           } else {
-            // Remove failed action after 3 retries
             await this.removePendingAction(action.id);
+            await this.logSyncAction(action, 'failed');
           }
         }
       }
 
-      console.log('Sync completed successfully');
+      // Notify about sync completion
+      this.notifySyncCompleted();
+      console.log('✅ Sync completed successfully');
     } catch (error) {
       console.error('Sync failed:', error);
     } finally {
       this.syncInProgress = false;
       this.notifyStatusChange();
     }
+  }
+
+  // Notify about sync completion
+  private notifySyncCompleted(): void {
+    // Dispatch custom event for sync completion
+    window.dispatchEvent(new CustomEvent('offlineSyncCompleted', {
+      detail: {
+        timestamp: new Date().toISOString(),
+        entity: 'hearings'
+      }
+    }));
+  }
+
+  // Get real ID from temp ID
+  getRealId(tempId: string): string {
+    const realId = this.tempIdMap.get(tempId);
+    console.log(`🔍 Looking up real ID for ${tempId}: ${realId || 'not found'}`);
+    console.log(`🔍 Current tempIdMap entries:`, Array.from(this.tempIdMap.entries()));
+    
+    // If we found a mapping, return the real ID
+    if (realId) {
+      return realId;
+    }
+    
+    // If no mapping found, check if this is already a real ID
+    // (by checking if it exists as a value in the map)
+    const allRealIds = Array.from(this.tempIdMap.values());
+    if (allRealIds.includes(tempId)) {
+      console.log(`🔍 ${tempId} is already a real ID`);
+      return tempId;
+    }
+    
+    // Otherwise, return the original ID (might be a temp ID with no mapping)
+    return tempId;
   }
 
   // Execute a pending action
@@ -318,13 +354,68 @@ class OfflineManager {
   // Execute hearing actions
   private async executeHearingAction(type: string, data: any): Promise<void> {
     // Import dbService functions dynamically to avoid circular dependencies
-    const { addHearing, updateHearing } = await import('./dbService');
+    const { addHearing, updateHearing, deleteHearing } = await import('./dbService');
     
     console.log(`Executing hearing ${type}:`, data);
     
     switch (type) {
       case 'create':
-        await addHearing(data);
+        // Create hearing in Firebase and get the real ID
+        const hearingId = await addHearing(data);
+        console.log(`✅ Hearing created with Firebase ID: ${hearingId}`);
+        
+        // Find and update the temp ID in cache
+        try {
+          const cachedData = await this.getCachedData('hearings');
+          console.log(`🔍 Cached hearings data:`, cachedData);
+          console.log(`🔍 Looking for hearing with data:`, data);
+          
+          let tempIdToReplace: string | null = null;
+          
+          const updatedCache = cachedData.map((hearing: any) => {
+            // Find the hearing with matching data (check both temp_hearing_ and any other ID)
+            if (hearing.id) {
+              const isMatchingHearing = (
+                hearing.caseId === data.caseId &&
+                hearing.date === data.date &&
+                hearing.time === data.time &&
+                hearing.type === data.type &&
+                hearing.location === data.location
+              );
+              
+              console.log(`🔍 Checking hearing ${hearing.id}:`, {
+                caseId: hearing.caseId,
+                date: hearing.date,
+                time: hearing.time,
+                type: hearing.type,
+                location: hearing.location,
+                isMatch: isMatchingHearing
+              });
+              
+              if (isMatchingHearing) {
+                tempIdToReplace = hearing.id;
+                console.log(`🔄 Found matching temp ID: ${tempIdToReplace}`);
+                console.log(`🔄 Hearing ID type check: ${hearing.id.startsWith('temp_hearing_') ? 'temp' : 'other'}`);
+                return { ...hearing, id: hearingId, _synced: true };
+              }
+            }
+            return hearing;
+          });
+          
+          // Store the mapping
+          if (tempIdToReplace) {
+            this.tempIdMap.set(tempIdToReplace, hearingId);
+            console.log(`📍 Stored ID mapping: ${tempIdToReplace} -> ${hearingId}`);
+            console.log(`📍 Current tempIdMap size: ${this.tempIdMap.size}`);
+          } else {
+            console.warn(`⚠️ No matching hearing found in cache for data:`, data);
+          }
+          
+          await this.cacheData('hearings', updatedCache);
+          console.log('✅ Updated local cache with real Firebase ID');
+        } catch (cacheError) {
+          console.warn('⚠️ Failed to update local cache:', cacheError);
+        }
         break;
       case 'update':
         if (!data.id) {
@@ -336,9 +427,12 @@ class OfflineManager {
         if (!data.id) {
           throw new Error('Hearing ID is required for delete');
         }
-        // Delete from Firestore
-        const { deleteHearing } = await import('./dbService');
-        await deleteHearing(data.id);
+        // Get real ID if this is a temp ID
+        const realId = this.getRealId(data.id);
+        console.log(`🗑️ Deleting hearing with ID: ${data.id} (real: ${realId})`);
+        
+        // Delete from Firestore using real ID
+        await deleteHearing(realId);
         break;
       default:
         throw new Error(`Unknown hearing action type: ${type}`);
