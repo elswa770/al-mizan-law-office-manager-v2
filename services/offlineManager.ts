@@ -336,8 +336,9 @@ class OfflineManager {
         if (!data.id) {
           throw new Error('Hearing ID is required for delete');
         }
-        // Delete functionality not available in dbService, skip for now
-        console.warn('Delete hearing action not implemented in dbService');
+        // Delete from Firestore
+        const { deleteHearing } = await import('./dbService');
+        await deleteHearing(data.id);
         break;
       default:
         throw new Error(`Unknown hearing action type: ${type}`);
@@ -463,6 +464,33 @@ class OfflineManager {
     store.clear();
 
     console.log('Cleared all cached data');
+    this.notifyStatusChange();
+  }
+
+  // Clear all pending actions
+  async clearPendingActions(): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    const transaction = this.db!.transaction(['pendingActions'], 'readwrite');
+    const store = transaction.objectStore('pendingActions');
+    store.clear();
+
+    console.log('Cleared all pending actions');
+    this.notifyStatusChange();
+  }
+
+  // Clear all cached data and pending actions
+  async clearAllData(): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    const transaction = this.db!.transaction(['cachedData', 'pendingActions'], 'readwrite');
+    const cachedStore = transaction.objectStore('cachedData');
+    const pendingStore = transaction.objectStore('pendingActions');
+    
+    cachedStore.clear();
+    pendingStore.clear();
+
+    console.log('Cleared all cached data and pending actions');
     this.notifyStatusChange();
   }
 

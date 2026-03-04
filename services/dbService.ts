@@ -158,6 +158,10 @@ export const updateHearing = async (id: string, hearingData: Partial<Hearing>) =
   await updateDoc(docRef, cleanedData);
 };
 
+export const deleteHearing = async (id: string) => {
+  await deleteDoc(doc(db, "hearings", id));
+};
+
 // --- Tasks ---
 export const getTasks = async (): Promise<Task[]> => {
   const querySnapshot = await getDocs(collection(db, "tasks"));

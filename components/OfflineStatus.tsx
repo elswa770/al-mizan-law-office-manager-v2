@@ -8,7 +8,7 @@ interface OfflineStatusProps {
 
 const OfflineStatus: React.FC<OfflineStatusProps> = ({ className = '' }) => {
   const status = useOfflineStatus();
-  const { isOnline, syncNow, clearCache, exportData, importData } = useOfflineActions();
+  const { isOnline, syncNow, clearCache, clearPendingActions, clearAllData, exportData, importData } = useOfflineActions();
   const [isSyncing, setIsSyncing] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -67,6 +67,43 @@ const OfflineStatus: React.FC<OfflineStatusProps> = ({ className = '' }) => {
       }
     };
     input.click();
+  };
+
+  const handleClearPendingActions = async () => {
+    if (confirm('هل أنت متأكد من مسح جميع الإجراءات المعلقة؟ هذا الإجراء لا يمكن التراجع عنه.')) {
+      const success = await clearPendingActions();
+      if (success) {
+        alert('تم مسح جميع الإجراءات المعلقة بنجاح!');
+        setShowDetails(false);
+      } else {
+        alert('فشل مسح الإجراءات المعلقة. يرجى المحاولة مرة أخرى.');
+      }
+    }
+  };
+
+  const handleClearAllData = async () => {
+    if (confirm('هل أنت متأكد من مسح جميع البيانات المحلية؟ هذا سيحذف البيانات المخزنة والإجراءات المعلقة ولا يمكن التراجع عنه.')) {
+      const success = await clearAllData();
+      if (success) {
+        alert('تم مسح جميع البيانات المحلية بنجاح! سيتم تحديث الصفحة.');
+        setShowDetails(false);
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        alert('فشل مسح البيانات. يرجى المحاولة مرة أخرى.');
+      }
+    }
+  };
+
+  const handleClearCache = async () => {
+    if (confirm('هل أنت متأكد من مسح ذاكرة التخزين المؤقت؟')) {
+      const success = await clearCache();
+      if (success) {
+        alert('تم مسح ذاكرة التخزين المؤقت بنجاح!');
+        setShowDetails(false);
+      } else {
+        alert('فشل مسح ذاكرة التخزين المؤقت. يرجى المحاولة مرة أخرى.');
+      }
+    }
   };
 
   const getStatusColor = () => {
@@ -238,11 +275,29 @@ const OfflineStatus: React.FC<OfflineStatusProps> = ({ className = '' }) => {
             </div>
 
             <button
-              onClick={clearCache}
+              onClick={handleClearCache}
               className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/30 transition-colors"
             >
               <Database className="w-4 h-4" />
               <span className="text-sm font-medium">مسح التخزين المؤقت</span>
+            </button>
+
+            {status.pendingActions > 0 && (
+              <button
+                onClick={handleClearPendingActions}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-amber-100 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/30 transition-colors"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span className="text-sm font-medium">مسح الإجراءات المعلقة ({status.pendingActions})</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleClearAllData}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+            >
+              <Database className="w-4 h-4" />
+              <span className="text-sm font-medium">مسح جميع البيانات المحلية</span>
             </button>
           </div>
         </div>

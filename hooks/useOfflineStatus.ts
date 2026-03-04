@@ -96,6 +96,26 @@ export const useOfflineActions = () => {
     }
   };
 
+  const clearPendingActions = async () => {
+    try {
+      await offlineManager.clearPendingActions();
+      return true;
+    } catch (error) {
+      console.error('Clear pending actions failed:', error);
+      return false;
+    }
+  };
+
+  const clearAllData = async () => {
+    try {
+      await offlineManager.clearAllData();
+      return true;
+    } catch (error) {
+      console.error('Clear all data failed:', error);
+      return false;
+    }
+  };
+
   const exportData = async () => {
     try {
       return await offlineManager.exportData();
@@ -119,6 +139,8 @@ export const useOfflineActions = () => {
     isOnline,
     syncNow,
     clearCache,
+    clearPendingActions,
+    clearAllData,
     exportData,
     importData
   };
