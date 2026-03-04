@@ -421,7 +421,12 @@ class OfflineManager {
         if (!data.id) {
           throw new Error('Hearing ID is required for update');
         }
-        await updateHearing(data.id, data);
+        // Get real ID if this is a temp ID
+        const realUpdateId = this.getRealId(data.id);
+        console.log(`🔄 Updating hearing with ID: ${data.id} (real: ${realUpdateId})`);
+        
+        // Update in Firestore using real ID
+        await updateHearing(realUpdateId, data);
         break;
       case 'delete':
         if (!data.id) {
