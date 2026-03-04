@@ -619,7 +619,9 @@ function App() {
       };
 
       // Check if online and try to save to Firebase
-      if (navigator.onLine) {
+      const isOnline = await checkNetworkConnectivity();
+      
+      if (isOnline) {
         try {
           const caseId = await addCase(caseData);
           
@@ -699,7 +701,9 @@ function App() {
       }
 
       // Check if online and try to update in Firebase
-      if (navigator.onLine) {
+      const isOnline = await checkNetworkConnectivity();
+      
+      if (isOnline) {
         try {
           // تحديث في Firebase
           await updateCase(updatedCase.id, updatedCase);
@@ -1196,11 +1200,64 @@ function App() {
       };
       
       const cleanClient = cleanObject(newClient);
+
+      // Check if online and try to save to Firebase
+      const isOnline = await checkNetworkConnectivity();
       
-      const clientId = await addClient(cleanClient);
-      setClients(prev => [{ ...newClient, id: clientId }, ...prev]);
+      if (isOnline) {
+        try {
+          const clientId = await addClient(cleanClient);
+          setClients(prev => [{ ...newClient, id: clientId }, ...prev]);
+          
+          // Cache the updated data
+          await offlineManager.cacheData('clients', [{ ...newClient, id: clientId }, ...clients]);
+          
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving client offline:', error);
+          
+          // Save to offline queue if Firebase fails
+          const tempId = `temp_client_${Date.now()}`;
+          setClients(prev => [{ ...newClient, id: tempId }, ...prev]);
+          
+          await offlineManager.addPendingAction({
+            type: 'create',
+            entity: 'client',
+            data: cleanClient
+          });
+          
+          // Cache locally with updated data
+          await offlineManager.cacheData('clients', [{ ...newClient, id: tempId }, ...clients]);
+        }
+      } else {
+        // Offline mode - save locally and add to queue
+        console.log('📱 App.tsx - Offline mode, saving client locally');
+        const tempId = `temp_client_${Date.now()}`;
+        
+        // Update local state first
+        const newClientWithId = { ...newClient, id: tempId };
+        const updatedClients = [newClientWithId, ...clients];
+        
+        console.log('📱 App.tsx - New client to add:', newClientWithId);
+        console.log('📱 App.tsx - Updated clients array:', updatedClients);
+        
+        setClients([...updatedClients]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        await offlineManager.addPendingAction({
+          type: 'create',
+          entity: 'client',
+          data: cleanClient
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('clients', updatedClients);
+        console.log('📱 App.tsx - Client added and cached successfully');
+      }
       
-      // Log activity
+      // Log activity (works offline too)
       await handleAddActivity({
         action: 'إضافة موكل جديد',
         target: newClient.name,
@@ -1223,7 +1280,9 @@ function App() {
       }
       
       // Check if online and try to update in Firebase
-      if (navigator.onLine) {
+      const isOnline = await checkNetworkConnectivity();
+      
+      if (isOnline) {
         try {
           // تحديث في Firebase
           await updateClient(updatedClient.id, updatedClient);

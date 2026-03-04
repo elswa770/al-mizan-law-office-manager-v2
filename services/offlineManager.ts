@@ -308,12 +308,21 @@ class OfflineManager {
         if (!data.id) {
           throw new Error('Case ID is required for update');
         }
-        await updateCase(data.id, data);
+        // Get real ID if this is a temp ID
+        const realCaseId = this.getRealId(data.id);
+        console.log(`🔄 Updating case with ID: ${data.id} (real: ${realCaseId})`);
+        
+        // Update in Firestore using real ID
+        await updateCase(realCaseId, data);
         break;
       case 'delete':
         if (!data.id) {
           throw new Error('Case ID is required for delete');
         }
+        // Get real ID if this is a temp ID
+        const realDeleteCaseId = this.getRealId(data.id);
+        console.log(`🗑️ Deleting case with ID: ${data.id} (real: ${realDeleteCaseId})`);
+        
         // Delete functionality not available in dbService, skip for now
         console.warn('Delete case action not implemented in dbService');
         break;
@@ -337,12 +346,21 @@ class OfflineManager {
         if (!data.id) {
           throw new Error('Client ID is required for update');
         }
-        await updateClient(data.id, data);
+        // Get real ID if this is a temp ID
+        const realClientId = this.getRealId(data.id);
+        console.log(`🔄 Updating client with ID: ${data.id} (real: ${realClientId})`);
+        
+        // Update in Firestore using real ID
+        await updateClient(realClientId, data);
         break;
       case 'delete':
         if (!data.id) {
           throw new Error('Client ID is required for delete');
         }
+        // Get real ID if this is a temp ID
+        const realDeleteClientId = this.getRealId(data.id);
+        console.log(`🗑️ Deleting client with ID: ${data.id} (real: ${realDeleteClientId})`);
+        
         // Delete functionality not available in dbService, skip for now
         console.warn('Delete client action not implemented in dbService');
         break;
