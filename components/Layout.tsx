@@ -30,9 +30,10 @@ interface LayoutProps {
   currentUser?: AppUser | null;
   authUser?: AuthUser | null;
   onLogout?: () => void;
+  appointments?: any[]; // Add appointments prop
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notifications = [], onNotificationClick, currentUser, authUser, onLogout }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notifications = [], onNotificationClick, currentUser, authUser, onLogout, appointments = [] }) => {
   // Sidebar State
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -167,8 +168,86 @@ const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notif
     }
   };
 
+  const getTodayAppointmentsCount = () => {
+    // Use local date instead of UTC to fix timezone issue
+    const todayLocal = new Date();
+    const todayString = todayLocal.getFullYear() + '-' + 
+      String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(todayLocal.getDate()).padStart(2, '0');
+    return appointments.filter(apt => apt.date === todayString).length;
+  };
+
   const renderNotificationsList = () => (
     <div className="max-h-80 overflow-y-auto">
+      {/* Today's Appointments Section */}
+      <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-indigo-50/50 dark:bg-indigo-900/20">
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="font-bold text-indigo-800 dark:text-indigo-300 text-sm flex items-center gap-2">
+            <Calendar className="w-4 h-4" />
+            مواعيد اليوم
+          </h4>
+          <span className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold border border-indigo-200">
+            {getTodayAppointmentsCount()} موعد
+          </span>
+        </div>
+        {getTodayAppointmentsCount() > 0 ? (
+          <div className="space-y-2">
+            {appointments
+              .filter(apt => {
+                // Use local date instead of UTC to fix timezone issue
+                const todayLocal = new Date();
+                const todayString = todayLocal.getFullYear() + '-' + 
+                  String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + 
+                  String(todayLocal.getDate()).padStart(2, '0');
+                return apt.date === todayString;
+              })
+              .sort((a, b) => a.startTime.localeCompare(b.startTime))
+              .slice(0, 3)
+              .map(appointment => (
+                <div 
+                  key={appointment.id}
+                  onClick={() => {
+                    onNavigate('appointments');
+                    setIsNotificationsOpen(false);
+                  }}
+                  className="p-3 bg-white dark:bg-slate-700 rounded-lg border border-indigo-200 dark:border-indigo-700 cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-800/50 transition-colors"
+                >
+                  <div className="flex justify-between items-start mb-1">
+                    <p className="text-sm font-bold text-indigo-800 dark:text-indigo-300 truncate">
+                      {appointment.title}
+                    </p>
+                    <span className="text-[10px] font-mono bg-indigo-100 dark:bg-indigo-900 px-1.5 py-0.5 rounded text-indigo-700 dark:text-indigo-300 whitespace-nowrap">
+                      {appointment.startTime}
+                    </span>
+                  </div>
+                  {appointment.description && (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">{appointment.description}</p>
+                  )}
+                </div>
+              ))}
+            {getTodayAppointmentsCount() > 3 && (
+              <div className="text-center">
+                <button 
+                  onClick={() => {
+                    onNavigate('appointments');
+                    setIsNotificationsOpen(false);
+                  }}
+                  className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium"
+                >
+                  +{getTodayAppointmentsCount() - 3} مواعيد أخرى
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="text-center py-4">
+            <Calendar className="w-8 h-8 mx-auto mb-2 opacity-20 text-indigo-400" />
+            <p className="text-sm text-indigo-600 dark:text-indigo-400">لا توجد مواعيد اليوم</p>
+          </div>
+        )}
+      </div>
+      
+      {/* Regular Notifications */}
       {notifications.length > 0 ? (
         <div className="divide-y divide-slate-50 dark:divide-slate-700">
           {notifications.map((notif) => {

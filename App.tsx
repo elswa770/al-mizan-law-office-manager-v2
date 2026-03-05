@@ -2132,11 +2132,15 @@ function App() {
           hearings={hearings} 
           tasks={tasks}
           activities={activities}
-          onNavigate={setCurrentPage}
+          appointments={appointments}
           onCaseClick={handleCaseClick}
           onUpdateTask={handleUpdateTask}
           onAddActivity={handleAddActivity}
+          onNavigate={setCurrentPage}
+          onUpdateCase={handleUpdateCase}
+          onUpdateClient={handleUpdateClient}
           readOnly={isReadOnly('dashboard')}
+          generalSettings={generalSettings}
         />;
       case 'cases':
         return <Cases 
@@ -2411,6 +2415,7 @@ function App() {
           currentUser={currentUser}
           authUser={authUser}
           onLogout={handleLogout}
+          appointments={appointments}
         >
           {renderPage()}
         </Layout>

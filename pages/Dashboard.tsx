@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Case, Client, Hearing, CaseStatus, Task, ActivityLog, HearingStatus, CaseDocument, ClientDocument } from '../types';
+import { Case, Client, Hearing, CaseStatus, Task, ActivityLog, HearingStatus, CaseDocument, ClientDocument, Appointment } from '../types';
 import { Briefcase, Users, Scale, AlertCircle, Calendar, CheckSquare, Clock, DollarSign, Plus, Search, Filter, ArrowUpRight, Upload, Bell, Zap, EyeOff, Eye, Check, AlertTriangle, FileText, X, FileCheck, User } from 'lucide-react';
 
 interface DashboardProps {
@@ -9,6 +9,7 @@ interface DashboardProps {
   hearings: Hearing[];
   tasks?: Task[];
   activities?: ActivityLog[];
+  appointments?: Appointment[]; // Add appointments prop with correct type
   onUpdateTask?: (task: Task) => void;
   onAddActivity?: (activity: Omit<ActivityLog, 'id'>) => void;
   onNavigate?: (page: string) => void;
@@ -32,7 +33,7 @@ const StatCard = ({ title, value, subtext, icon: Icon, color, onClick }: { title
   </div>
 );
 
-const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks = [], activities = [], onUpdateTask, onAddActivity, onNavigate, onCaseClick, onUpdateCase, onUpdateClient, readOnly = false, generalSettings }) => {
+const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks = [], activities = [], appointments = [], onUpdateTask, onAddActivity, onNavigate, onCaseClick, onUpdateCase, onUpdateClient, readOnly = false, generalSettings }) => {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -146,6 +147,40 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
   today.setHours(0,0,0,0);
 
   const activeCases = cases.filter(c => c.status !== CaseStatus.CLOSED && c.status !== CaseStatus.ARCHIVED).length;
+  
+  // Today's appointments
+  const todayAppointments = useMemo(() => {
+    // Use local date instead of UTC to fix timezone issue
+    const todayLocal = new Date();
+    const todayString = todayLocal.getFullYear() + '-' + 
+      String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + 
+      String(todayLocal.getDate()).padStart(2, '0');
+    
+    console.log('Dashboard - Today String (Local):', todayString);
+    console.log('Dashboard - All Appointments:', appointments);
+    console.log('Dashboard - Appointments type:', typeof appointments);
+    console.log('Dashboard - Is appointments array?', Array.isArray(appointments));
+    
+    if (!Array.isArray(appointments)) {
+      console.log('Dashboard - Appointments is not an array!');
+      return [];
+    }
+    
+    const filtered = appointments.filter(apt => {
+      console.log('Dashboard - Checking appointment:', apt, 'apt.date:', apt.date, 'todayString:', todayString);
+      return apt.date === todayString;
+    });
+    console.log('Dashboard - Today Appointments:', filtered);
+    return filtered;
+  }, [appointments]);
+
+  // Add debug for the card value
+  console.log('Dashboard - todayAppointments.length:', todayAppointments.length);
+  
+  // Remove the debug logs after fixing
+  setTimeout(() => {
+    console.clear();
+  }, 5000);
   
   const todayHearings = hearings.filter(h => {
     const d = new Date(h.date);
@@ -319,6 +354,14 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
                onClick={() => onNavigate && onNavigate('cases')}
             />
             <StatCard 
+               title="مواعيد اليوم" 
+               value={todayAppointments.length} 
+               subtext="مواعيد مجدولة اليوم"
+               icon={Calendar} 
+               color={todayAppointments.length > 0 ? "text-indigo-600 bg-indigo-600" : "text-slate-600 bg-slate-600"}
+               onClick={() => onNavigate && onNavigate('appointments')}
+            />
+            <StatCard 
                title="جلسات اليوم" 
                value={todayHearings.length} 
                subtext="تتطلب إجراء عاجل"
@@ -333,13 +376,6 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
                icon={AlertCircle} 
                color={delayedHearings > 0 ? "text-red-600 bg-red-600" : "text-green-600 bg-green-600"}
             />
-            <StatCard 
-               title="مستحقات معلقة" 
-               value={totalDues.toLocaleString()} 
-               subtext="جنية مصري"
-               icon={DollarSign} 
-               color="text-emerald-600 bg-emerald-600" 
-            />
          </div>
       )}
 
@@ -349,7 +385,42 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
          {/* Left Column (2/3) */}
          <div className="lg:col-span-2 space-y-6">
             
-            {/* A. Critical Widget: Today's Hearings */}
+            {/* A. Critical Widget: Today's Appointments */}
+            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden relative transition-colors">
+               <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+               <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-indigo-50/30 dark:bg-indigo-900/10">
+                  <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                     <Calendar className="w-5 h-5 text-indigo-600 dark:text-indigo-500" />
+                     مواعيد اليوم {searchTerm && `(البحث: ${todayAppointments.length})`}
+                  </h3>
+                  <button onClick={() => onNavigate && onNavigate('appointments')} className="text-xs text-primary-600 dark:text-primary-400 font-bold hover:underline">عرض جدول المواعيد</button>
+               </div>
+               
+               <div className="divide-y divide-slate-50 dark:divide-slate-700">
+                  {todayAppointments.length > 0 ? todayAppointments.slice(0, 5).map(appointment => (
+                     <div key={appointment.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group">
+                        <div className="flex items-center gap-4">
+                           <div className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-mono text-sm px-2 py-1 rounded font-bold">
+                              {appointment.startTime || '09:00'}
+                           </div>
+                           <div>
+                              <h4 className="font-bold text-slate-800 dark:text-white text-sm">{appointment.title}</h4>
+                              {appointment.description && (
+                                 <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-1">{appointment.description}</p>
+                              )}
+                           </div>
+                        </div>
+                     </div>
+                  )) : (
+                     <div className="p-8 text-center text-slate-400">
+                        <Calendar className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                        <p className="text-sm">لا توجد مواعيد اليوم</p>
+                     </div>
+                  )}
+               </div>
+            </div>
+
+            {/* B. Critical Widget: Today's Hearings */}
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden relative transition-colors">
                <div className="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-amber-50/30 dark:bg-amber-900/10">
