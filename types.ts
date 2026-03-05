@@ -323,6 +323,21 @@ export interface Task {
   status: 'pending' | 'in_progress' | 'completed';
   relatedCaseId?: string;
   assignedTo?: string; // User ID
+  
+  // --- حقول إضافية مفيدة ---
+  estimatedHours?: number; // الوقت التقديري بالساعات
+  actualHours?: number; // الوقت الفعلي بالساعات
+  tags?: string[]; // وسوم للتصنيف
+  category?: 'legal' | 'administrative' | 'research' | 'meeting' | 'other'; // تصنيف المهمة
+  progress?: number; // نسبة الإنجاز 0-100
+  attachments?: string[]; // روابط الملفات المرفقة
+  reminderDate?: string; // تاريخ التذكير
+  location?: string; // مكان تنفيذ المهمة
+  dependsOn?: string[]; // مهام يعتمد عليها
+  createdBy?: string; // منشئ المهمة
+  createdAt?: string; // تاريخ الإنشاء
+  completedAt?: string; // تاريخ الإنجاز
+  notes?: string; // ملاحظات إضافية
 }
 
 export interface ActivityLog {

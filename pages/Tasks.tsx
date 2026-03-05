@@ -4,7 +4,8 @@ import { Task, Case, AppUser } from '../types';
 import { 
   CheckSquare, Plus, Search, Filter, Calendar, User, Briefcase, 
   Clock, AlertCircle, MoreHorizontal, LayoutGrid, List, Trash2, Edit3,
-  CheckCircle, ArrowRight, Layout, Wifi, WifiOff
+  CheckCircle, ArrowRight, Layout, Wifi, WifiOff, 
+  Tag, MapPin, Paperclip, Timer, Target, TrendingUp, Users, FileText, Bell
 } from 'lucide-react';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 
@@ -42,14 +43,28 @@ const Tasks: React.FC<TasksProps> = ({
     priority: 'medium',
     status: 'pending',
     relatedCaseId: '',
-    assignedTo: ''
+    assignedTo: '',
+    estimatedHours: undefined,
+    actualHours: undefined,
+    tags: [],
+    category: 'other',
+    progress: 0,
+    attachments: [],
+    reminderDate: '',
+    location: '',
+    dependsOn: [],
+    createdBy: '',
+    createdAt: new Date().toISOString(),
+    completedAt: undefined,
+    notes: ''
   });
 
   // --- Filtering ---
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
       const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            t.description?.toLowerCase().includes(searchTerm.toLowerCase());
+                            t.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            t.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
       const matchesUser = filterUser === 'all' || t.assignedTo === filterUser;
       
@@ -134,10 +149,24 @@ const Tasks: React.FC<TasksProps> = ({
 
   const renderTaskCard = (task: Task) => (
     <div key={task.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group relative">
-      <div className="flex justify-between items-start mb-2">
-        <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${getPriorityColor(task.priority)}`}>
-          {task.priority === 'high' ? 'عاجل' : task.priority === 'medium' ? 'متوسط' : 'عادي'}
-        </span>
+      {/* Header with Priority and Actions */}
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${getPriorityColor(task.priority)}`}>
+            {task.priority === 'high' ? 'عاجل' : task.priority === 'medium' ? 'متوسط' : 'عادي'}
+          </span>
+          
+          {/* Category Badge */}
+          {task.category && (
+            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+              {task.category === 'legal' ? 'قانوني' : 
+               task.category === 'administrative' ? 'إداري' :
+               task.category === 'research' ? 'بحث' :
+               task.category === 'meeting' ? 'اجتماع' : 'أخرى'}
+            </span>
+          )}
+        </div>
+        
         {!readOnly && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
             <button onClick={() => handleOpenModal(task)} className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
@@ -150,41 +179,122 @@ const Tasks: React.FC<TasksProps> = ({
         )}
       </div>
       
-      <h4 className="font-bold text-slate-800 dark:text-white mb-1 line-clamp-2">{task.title}</h4>
-      {task.description && <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-3">{task.description}</p>}
+      {/* Title and Description */}
+      <h4 className="font-bold text-slate-800 dark:text-white mb-2 line-clamp-2">{task.title}</h4>
+      {task.description && <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-3">{task.description}</p>}
       
-      <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-        <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <Calendar className="w-3 h-3" />
-          <span>{task.dueDate}</span>
+      {/* Tags */}
+      {task.tags && task.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3">
+          {task.tags.map((tag, index) => (
+            <span key={index} className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+      
+      {/* Progress Bar */}
+      {task.progress !== undefined && task.progress > 0 && (
+        <div className="mb-3">
+          <div className="flex justify-between items-center mb-1">
+            <span className="text-xs text-slate-500 dark:text-slate-400">نسبة الإنجاز</span>
+            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{task.progress}%</span>
+          </div>
+          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
+            <div 
+              className="bg-green-500 h-2 rounded-full transition-all duration-300"
+              style={{ width: `${task.progress}%` }}
+            />
+          </div>
+        </div>
+      )}
+      
+      {/* Task Details Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+        {/* Due Date and Reminder */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <Calendar className="w-3 h-3" />
+            <span>تاريخ الاستحقاق: {task.dueDate}</span>
+          </div>
+          
+          {task.reminderDate && (
+            <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
+              <Bell className="w-3 h-3" />
+              <span>تذكير: {new Date(task.reminderDate).toLocaleString('ar-EG')}</span>
+            </div>
+          )}
         </div>
         
+        {/* Location and Time */}
+        <div className="space-y-2">
+          {task.location && (
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <MapPin className="w-3 h-3" />
+              <span>المكان: {task.location}</span>
+            </div>
+          )}
+          
+          {(task.estimatedHours || task.actualHours) && (
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <Timer className="w-3 h-3" />
+              <span>
+                التقديري: {task.estimatedHours || '-'}س | 
+                الفعلي: {task.actualHours || '-'}س
+              </span>
+            </div>
+          )}
+        </div>
+        
+        {/* Case Assignment */}
         {task.relatedCaseId && (
           <div className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline" onClick={() => onCaseClick(task.relatedCaseId!)}>
             <Briefcase className="w-3 h-3" />
             <span className="truncate max-w-[150px]">{getCaseName(task.relatedCaseId)}</span>
           </div>
         )}
-
-        <div className="flex items-center justify-between mt-2">
-           <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">
+        
+        {/* User Assignment */}
+        {task.assignedTo && (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">
               <User className="w-3 h-3" />
               <span>{getUserName(task.assignedTo)}</span>
-           </div>
-           
-           {!readOnly && (
-             <select 
-               className="text-[10px] bg-transparent border border-slate-200 dark:border-slate-600 rounded p-1 outline-none cursor-pointer"
-               value={task.status}
-               onChange={(e) => handleChangeStatus(task.id, e.target.value as any)}
-             >
-               <option value="pending">قيد الانتظار</option>
-               <option value="in_progress">جاري التنفيذ</option>
-               <option value="completed">مكتمل</option>
-             </select>
-           )}
-        </div>
+            </div>
+            
+            {/* Status Selector */}
+            {!readOnly && (
+              <select 
+                className="text-[10px] bg-transparent border border-slate-200 dark:border-slate-600 rounded p-1 outline-none cursor-pointer"
+                value={task.status}
+                onChange={(e) => handleChangeStatus(task.id, e.target.value as any)}
+              >
+                <option value="pending">قيد الانتظار</option>
+                <option value="in_progress">جاري التنفيذ</option>
+                <option value="completed">مكتمل</option>
+              </select>
+            )}
+          </div>
+        )}
       </div>
+      
+      {/* Additional Notes */}
+      {task.notes && (
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            <span className="font-medium">ملاحظات:</span> {task.notes}
+          </div>
+        </div>
+      )}
+      
+      {/* Completion Date */}
+      {task.completedAt && (
+        <div className="mt-2 text-xs text-green-600 dark:text-green-400">
+          <CheckCircle className="w-3 h-3 inline ml-1" />
+          تم الإنجاز: {new Date(task.completedAt).toLocaleString('ar-EG')}
+        </div>
+      )}
     </div>
   );
 
@@ -409,84 +519,265 @@ const Tasks: React.FC<TasksProps> = ({
                </h3>
                
                <form onSubmit={handleSaveTask} className="space-y-4">
-                  <div>
-                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">عنوان المهمة <span className="text-red-500">*</span></label>
-                     <input 
-                        type="text" 
-                        required
-                        className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                        value={formData.title}
-                        onChange={e => setFormData({...formData, title: e.target.value})}
-                        placeholder="مثال: كتابة مذكرة دفاع..."
-                     />
-                  </div>
-                  <div>
-                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">التفاصيل / الوصف</label>
-                     <textarea 
-                        className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                        rows={3}
-                        value={formData.description || ''}
-                        onChange={e => setFormData({...formData, description: e.target.value})}
-                     />
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                     <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تاريخ الاستحقاق</label>
-                        <input 
-                           type="date" 
-                           required
-                           className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                           value={formData.dueDate}
-                           onChange={e => setFormData({...formData, dueDate: e.target.value})}
-                        />
-                     </div>
-                     <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الأولوية</label>
-                        <select 
-                           className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                           value={formData.priority}
-                           onChange={e => setFormData({...formData, priority: e.target.value as any})}
-                        >
-                           <option value="low">عادي</option>
-                           <option value="medium">متوسط</option>
-                           <option value="high">عاجل</option>
-                        </select>
+                  {/* --- المعلومات الأساسية --- */}
+                  <div className="border-b pb-4 mb-4">
+                     <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        المعلومات الأساسية
+                     </h4>
+                     
+                     <div className="grid grid-cols-1 gap-4">
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">عنوان المهمة <span className="text-red-500">*</span></label>
+                           <input 
+                              type="text" 
+                              required
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.title}
+                              onChange={e => setFormData({...formData, title: e.target.value})}
+                              placeholder="مثال: كتابة مذكرة دفاع..."
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">التفاصيل / الوصف</label>
+                           <textarea 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              rows={3}
+                              value={formData.description || ''}
+                              onChange={e => setFormData({...formData, description: e.target.value})}
+                              placeholder="تفاصيل إضافية عن المهمة..."
+                           />
+                        </div>
                      </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                     <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">مرتبط بقضية</label>
-                        <select 
-                           className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                           value={formData.relatedCaseId || ''}
-                           onChange={e => setFormData({...formData, relatedCaseId: e.target.value})}
-                        >
-                           <option value="">-- بدون ارتباط --</option>
-                           {cases.map(c => (
-                              <option key={c.id} value={c.id}>{c.title}</option>
-                           ))}
-                        </select>
-                     </div>
-                     <div>
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تعيين إلى</label>
-                        <select 
-                           className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                           value={formData.assignedTo || ''}
-                           onChange={e => setFormData({...formData, assignedTo: e.target.value})}
-                        >
-                           <option value="">-- اختر موظف --</option>
-                           {users.map(u => (
-                              <option key={u.id} value={u.id}>{u.name}</option>
-                           ))}
-                        </select>
+                  {/* --- التصنيف والأولوية --- */}
+                  <div className="border-b pb-4 mb-4">
+                     <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                        <Tag className="w-4 h-4" />
+                        التصنيف والأولوية
+                     </h4>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تصنيف المهمة</label>
+                           <select 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.category}
+                              onChange={e => setFormData({...formData, category: e.target.value as any})}
+                           >
+                              <option value="legal">قانوني</option>
+                              <option value="administrative">إداري</option>
+                              <option value="research">بحث</option>
+                              <option value="meeting">اجتماع</option>
+                              <option value="other">أخرى</option>
+                           </select>
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الأولوية</label>
+                           <select 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.priority}
+                              onChange={e => setFormData({...formData, priority: e.target.value as any})}
+                           >
+                              <option value="low">عادي</option>
+                              <option value="medium">متوسط</option>
+                              <option value="high">عاجل</option>
+                           </select>
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الحالة</label>
+                           <select 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.status}
+                              onChange={e => setFormData({...formData, status: e.target.value as any})}
+                           >
+                              <option value="pending">معلقة</option>
+                              <option value="in_progress">قيد التنفيذ</option>
+                              <option value="completed">منجزة</option>
+                           </select>
+                        </div>
                      </div>
                   </div>
+
+                  {/* --- الوقت والتواريخ --- */}
+                  <div className="border-b pb-4 mb-4">
+                     <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                        <Clock className="w-4 h-4" />
+                        الوقت والتواريخ
+                     </h4>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تاريخ الاستحقاق</label>
+                           <input 
+                              type="date" 
+                              required
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.dueDate}
+                              onChange={e => setFormData({...formData, dueDate: e.target.value})}
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تاريخ التذكير</label>
+                           <input 
+                              type="datetime-local" 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.reminderDate}
+                              onChange={e => setFormData({...formData, reminderDate: e.target.value})}
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الوقت التقديري (ساعات)</label>
+                           <input 
+                              type="number" 
+                              min="0.5"
+                              step="0.5"
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.estimatedHours || ''}
+                              onChange={e => setFormData({...formData, estimatedHours: parseFloat(e.target.value) || undefined})}
+                              placeholder="مثال: 2.5"
+                           />
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* --- التخصيص والارتباطات --- */}
+                  <div className="border-b pb-4 mb-4">
+                     <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                        <Target className="w-4 h-4" />
+                        التخصيص والارتباطات
+                     </h4>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">مرتبط بقضية</label>
+                           <select 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.relatedCaseId || ''}
+                              onChange={e => setFormData({...formData, relatedCaseId: e.target.value})}
+                           >
+                              <option value="">-- بدون ارتباط --</option>
+                              {cases.map(c => (
+                                 <option key={c.id} value={c.id}>{c.title}</option>
+                              ))}
+                           </select>
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تعيين إلى</label>
+                           <select 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.assignedTo || ''}
+                              onChange={e => setFormData({...formData, assignedTo: e.target.value})}
+                           >
+                              <option value="">-- اختر موظف --</option>
+                              {users.map(u => (
+                                 <option key={u.id} value={u.id}>{u.name}</option>
+                              ))}
+                           </select>
+                        </div>
+                     </div>
+                     
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">مكان التنفيذ</label>
+                           <input 
+                              type="text" 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.location || ''}
+                              onChange={e => setFormData({...formData, location: e.target.value})}
+                              placeholder="مثال: المكتب، المحكمة، اجتماع عبر Zoom..."
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">نسبة الإنجاز (%)</label>
+                           <div className="flex items-center gap-2">
+                              <input 
+                                 type="range" 
+                                 min="0"
+                                 max="100"
+                                 className="flex-1"
+                                 value={formData.progress || 0}
+                                 onChange={e => setFormData({...formData, progress: parseInt(e.target.value)})}
+                              />
+                              <span className="text-sm font-medium text-slate-600 dark:text-slate-400 w-12 text-center">
+                                 {formData.progress || 0}%
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* --- الوسوم والملاحظات --- */}
+                  <div className="border-b pb-4 mb-4">
+                     <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                        <Tag className="w-4 h-4" />
+                        الوسوم والملاحظات
+                     </h4>
+                     
+                     <div className="space-y-4">
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">وسوم (افصل بين الوسوم بفاصلة)</label>
+                           <input 
+                              type="text" 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              value={formData.tags?.join(', ') || ''}
+                              onChange={e => setFormData({...formData, tags: e.target.value.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)})}
+                              placeholder="مثال: عاجل، محكمة، بحث"
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">ملاحظات إضافية</label>
+                           <textarea 
+                              className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                              rows={2}
+                              value={formData.notes || ''}
+                              onChange={e => setFormData({...formData, notes: e.target.value})}
+                              placeholder="ملاحظات داخلية أو متطلبات خاصة..."
+                           />
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* --- الوقت الفعلي والإحصائيات --- */}
+                  {editingTask && (
+                     <div className="border-b pb-4 mb-4">
+                        <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                           <Timer className="w-4 h-4" />
+                           الوقت الفعلي والإحصائيات
+                        </h4>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الوقت الفعلي (ساعات)</label>
+                              <input 
+                                 type="number" 
+                                 min="0.5"
+                                 step="0.5"
+                                 className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                 value={formData.actualHours || ''}
+                                 onChange={e => setFormData({...formData, actualHours: parseFloat(e.target.value) || undefined})}
+                                 placeholder="الوقت الفعلي المنقضي"
+                              />
+                           </div>
+                           <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تاريخ الإنجاز</label>
+                              <input 
+                                 type="datetime-local" 
+                                 className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                 value={formData.completedAt || ''}
+                                 onChange={e => setFormData({...formData, completedAt: e.target.value})}
+                              />
+                           </div>
+                        </div>
+                     </div>
+                  )}
 
                   <div className="flex gap-3 pt-4">
                      <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300">إلغاء</button>
-                     <button type="submit" className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">حفظ المهمة</button>
+                     <button type="submit" className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+                        {editingTask ? 'تحديث المهمة' : 'حفظ المهمة'}
+                     </button>
                   </div>
                </form>
             </div>
