@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Case, Client, CaseStatus, CourtType, LawBranch, Lawyer, Hearing } from '../types';
-import { Briefcase, Search, Plus, Filter, User, Calendar, MapPin, ArrowUpRight, X, Save, Gavel, LayoutGrid, List, Users, Scale, AlertTriangle } from 'lucide-react';
+import { Briefcase, Search, Plus, Filter, User, Calendar, MapPin, ArrowUpRight, X, Save, Gavel, LayoutGrid, List, Users, Scale, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
 
 interface CasesProps {
   cases: Case[];
@@ -14,6 +15,11 @@ interface CasesProps {
 }
 
 const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCaseClick, onAddCase, readOnly = false }) => {
+  // --- Offline Status ---
+  const offlineStatus = useOfflineStatus();
+  const isOnline = offlineStatus?.online ?? true;
+  const pendingCount = offlineStatus?.pendingActions ?? 0;
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -315,12 +321,35 @@ const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCase
 
   return (
     <div className="space-y-6 pb-20">
+      
+      {/* Offline Status Indicator */}
+      {!isOnline && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center gap-2">
+          <WifiOff className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              وضع عدم الاتصال - سيتم حفظ القضايا محلياً
+            </p>
+            {pendingCount > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                {pendingCount} إجراء تنتظر المزامنة
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row justify-between items-center gap-4 transition-colors">
         <div>
           <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Briefcase className="w-6 h-6 text-primary-600" />
             سجل القضايا
+            {isOnline ? (
+              <Wifi className="w-5 h-5 text-green-500" />
+            ) : (
+              <WifiOff className="w-5 h-5 text-amber-500" />
+            )}
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">إدارة ومتابعة جميع ملفات القضايا ({cases.length} قضية)</p>
         </div>

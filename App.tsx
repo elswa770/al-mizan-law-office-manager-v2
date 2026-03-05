@@ -1376,10 +1376,63 @@ function App() {
 
   const handleAddTask = async (newTask: Task) => {
     try {
-      const taskId = await addTask(newTask);
-      setTasks(prev => [{ ...newTask, id: taskId }, ...prev]);
+      // Check if online and try to save to Firebase
+      const isOnline = await checkNetworkConnectivity();
       
-      // Log activity
+      if (isOnline) {
+        try {
+          const taskId = await addTask(newTask);
+          setTasks(prev => [{ ...newTask, id: taskId }, ...prev]);
+          
+          // Cache the updated data
+          await offlineManager.cacheData('tasks', [{ ...newTask, id: taskId }, ...tasks]);
+          
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving task offline:', error);
+          
+          // Save to offline queue if Firebase fails
+          const tempId = `temp_task_${Date.now()}`;
+          setTasks(prev => [{ ...newTask, id: tempId }, ...prev]);
+          
+          await offlineManager.addPendingAction({
+            type: 'create',
+            entity: 'task',
+            data: newTask
+          });
+          
+          // Cache locally with updated data
+          await offlineManager.cacheData('tasks', [{ ...newTask, id: tempId }, ...tasks]);
+        }
+      } else {
+        // Offline mode - save locally and add to queue
+        console.log('📱 App.tsx - Offline mode, saving task locally');
+        const tempId = `temp_task_${Date.now()}`;
+        
+        // Update local state first
+        const newTaskWithId = { ...newTask, id: tempId };
+        const updatedTasks = [newTaskWithId, ...tasks];
+        
+        console.log('📱 App.tsx - New task to add:', newTaskWithId);
+        console.log('📱 App.tsx - Updated tasks array:', updatedTasks);
+        
+        setTasks([...updatedTasks]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        await offlineManager.addPendingAction({
+          type: 'create',
+          entity: 'task',
+          data: newTask
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('tasks', updatedTasks);
+        console.log('📱 App.tsx - Task added and cached successfully');
+      }
+      
+      // Log activity (works offline too)
       const caseTitle = newTask.relatedCaseId ? cases.find(c => c.id === newTask.relatedCaseId)?.title || 'قضية غير معروفة' : 'مهمة عامة';
       await handleAddActivity({
         action: 'إضافة مهمة جديدة',
@@ -1395,10 +1448,94 @@ function App() {
 
   const handleUpdateTask = async (updatedTask: Task) => {
     try {
-      await updateTask(updatedTask.id, updatedTask);
-      setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+      // Check if online and try to update in Firebase
+      const isOnline = await checkNetworkConnectivity();
       
-      // Log activity
+      if (isOnline) {
+        try {
+          // تحديث في Firebase
+          await updateTask(updatedTask.id, updatedTask);
+          
+          // تحديث الحالة المحلية بشكل صحيح
+          setTasks(prev => {
+            const updatedTasks = prev.map(t => {
+              if (t.id === updatedTask.id) {
+                // دمج البيانات بدلاً من الاستبدال الكامل
+                return { ...t, ...updatedTask };
+              }
+              return t;
+            });
+            return updatedTasks;
+          });
+          
+          // Cache the updated data
+          await offlineManager.cacheData('tasks', tasks.map(t => 
+            t.id === updatedTask.id ? { ...t, ...updatedTask } : t
+          ));
+          
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving update offline:', error);
+          
+          // Save update to offline queue if Firebase fails
+          setTasks(prev => {
+            const updatedTasks = prev.map(t => {
+              if (t.id === updatedTask.id) {
+                return { ...t, ...updatedTask };
+              }
+              return t;
+            });
+            return updatedTasks;
+          });
+          
+          await offlineManager.addPendingAction({
+            type: 'update',
+            entity: 'task',
+            data: updatedTask
+          });
+        }
+      } else {
+        // Offline mode - save locally and add to queue
+        console.log('📱 App.tsx - Offline mode, updating task locally');
+        console.log('📱 App.tsx - Task to update:', updatedTask);
+        console.log('📱 App.tsx - Current tasks before update:', tasks);
+        
+        // Update local state first
+        const updatedTasks = tasks.map(t => {
+          if (t.id === updatedTask.id) {
+            console.log('📱 App.tsx - Found task to update:', t);
+            console.log('📱 App.tsx - Updated task will be:', { ...t, ...updatedTask });
+            return { ...t, ...updatedTask };
+          }
+          return t;
+        });
+        
+        console.log('📱 App.tsx - Updated tasks array:', updatedTasks);
+        console.log('📱 App.tsx - Setting tasks with new data...');
+        
+        // Force update with new array reference
+        setTasks([...updatedTasks]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        // Verify the update happened
+        setTimeout(() => {
+          console.log('📱 App.tsx - Tasks after setTasks:', tasks);
+        }, 100);
+        
+        await offlineManager.addPendingAction({
+          type: 'update',
+          entity: 'task',
+          data: updatedTask
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('tasks', updatedTasks);
+        console.log('📱 App.tsx - Task updated and cached successfully');
+      }
+      
+      // Log activity (works offline too)
       const caseTitle = updatedTask.relatedCaseId ? cases.find(c => c.id === updatedTask.relatedCaseId)?.title || 'قضية غير معروفة' : 'مهمة عامة';
       await handleAddActivity({
         action: 'تعديل المهمة',
@@ -1416,10 +1553,60 @@ function App() {
     try {
       const taskToDelete = tasks.find(t => t.id === taskId);
       if (taskToDelete) {
-        await deleteTask(taskId);
-        setTasks(prev => prev.filter(t => t.id !== taskId));
+        // Get real ID if this is a temp ID
+        const realId = offlineManager.getRealId(taskId);
+        console.log(`🗑️ App.tsx - Deleting task with ID: ${taskId} (real: ${realId})`);
         
-        // Log activity
+        // Check if online and try to delete from Firebase
+        const isOnline = await checkNetworkConnectivity();
+        
+        if (isOnline) {
+          try {
+            // Delete from Firestore using real ID
+            await deleteTask(realId);
+            setTasks(prev => prev.filter(t => t.id !== taskId));
+            
+            // Cache the updated data
+            await offlineManager.cacheData('tasks', tasks.filter(t => t.id !== taskId));
+            
+          } catch (error) {
+            console.error('❌ App.tsx - Firebase error, saving delete offline:', error);
+            
+            // Save delete to offline queue if Firebase fails
+            setTasks(prev => prev.filter(t => t.id !== taskId));
+            
+            await offlineManager.addPendingAction({
+              type: 'delete',
+              entity: 'task',
+              data: { id: taskId }
+            });
+          }
+        } else {
+          // Offline mode - save locally and add to queue
+          console.log('📱 App.tsx - Offline mode, deleting task locally');
+          
+          // Update local state first
+          const updatedTasks = tasks.filter(t => t.id !== taskId);
+          console.log('📱 App.tsx - Tasks after deletion:', updatedTasks);
+          
+          setTasks([...updatedTasks]);
+          
+          // Force re-render of components
+          setForceUpdate(prev => prev + 1);
+          setRefreshKey(prev => prev + 1); // Additional force re-render
+          
+          await offlineManager.addPendingAction({
+            type: 'delete',
+            entity: 'task',
+            data: { id: taskId }
+          });
+          
+          // Cache locally with updated data
+          await offlineManager.cacheData('tasks', updatedTasks);
+          console.log('📱 App.tsx - Task deleted and cached successfully');
+        }
+        
+        // Log activity (works offline too)
         const caseTitle = taskToDelete.relatedCaseId ? cases.find(c => c.id === taskToDelete.relatedCaseId)?.title || 'قضية غير معروفة' : 'مهمة عامة';
         await handleAddActivity({
           action: 'حذف المهمة',
@@ -1771,10 +1958,10 @@ function App() {
           readOnly={isReadOnly('documents')}
         />;
       case 'fees':
-        return <Cases 
-          key={`cases-${forceUpdate}`}
+        return <Fees 
+          key={`fees-${forceUpdate}`}
           cases={cases} 
-          clients={clients} 
+          clients={clients}
           hearings={hearings}
           onUpdateCase={handleUpdateCase}
           onAddActivity={handleAddActivity}

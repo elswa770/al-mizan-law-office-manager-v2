@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Client, Case, Hearing, ClientType, ClientStatus } from '../types';
-import { User, Phone, MapPin, Search, Plus, X, Save, Mail, FileText, Grid, List, Building2, Filter, Download, MessageCircle, ArrowUpRight, DollarSign, Calendar, FileSpreadsheet, Printer, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { User, Phone, MapPin, Search, Plus, X, Save, Mail, FileText, Grid, List, Building2, Filter, Download, MessageCircle, ArrowUpRight, DollarSign, Calendar, FileSpreadsheet, Printer, AlertTriangle, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
 
 interface ClientsProps {
   clients: Client[];
@@ -14,6 +15,11 @@ interface ClientsProps {
 }
 
 const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientClick, onAddClient, onUpdateClient, readOnly = false }) => {
+  // --- Offline Status ---
+  const offlineStatus = useOfflineStatus();
+  const isOnline = offlineStatus?.online ?? true;
+  const pendingCount = offlineStatus?.pendingActions ?? 0;
+  
   // View State
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [searchTerm, setSearchTerm] = useState('');
@@ -433,6 +439,24 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
 
   return (
     <div className="space-y-6 pb-20">
+      
+      {/* Offline Status Indicator */}
+      {!isOnline && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center gap-2">
+          <WifiOff className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              وضع عدم الاتصال - سيتم حفظ الموكلين محلياً
+            </p>
+            {pendingCount > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                {pendingCount} إجراء تنتظر المزامنة
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      
        {/* 1. Clients Header */}
        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors">
           <div className="flex flex-col lg:flex-row justify-between items-center gap-4 mb-4">
@@ -441,7 +465,14 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
                    <User className="w-6 h-6" />
                 </div>
                 <div>
-                   <h2 className="text-xl font-bold text-slate-800 dark:text-white">إدارة الموكلين</h2>
+                   <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                      إدارة الموكلين
+                      {isOnline ? (
+                        <Wifi className="w-5 h-5 text-green-500" />
+                      ) : (
+                        <WifiOff className="w-5 h-5 text-amber-500" />
+                      )}
+                   </h2>
                    <p className="text-xs text-slate-500 dark:text-slate-400">قاعدة بيانات العملاء ({clients.length} موكل)</p>
                 </div>
              </div>

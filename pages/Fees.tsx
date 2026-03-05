@@ -1,22 +1,29 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Case, Client, Hearing, PaymentMethod, FinancialTransaction, ActivityLog } from '../types';
-import { Wallet, TrendingUp, TrendingDown, DollarSign, PieChart, ArrowUpRight, ArrowDownLeft, Filter, Search, Plus, CreditCard, Calendar, FileText, AlertCircle, CheckCircle, Calculator, User, Receipt, X, Building, Smartphone, Banknote, ScrollText, Printer, Share2, Download } from 'lucide-react';
+import { Wallet, TrendingUp, TrendingDown, DollarSign, PieChart, ArrowUpRight, ArrowDownLeft, Filter, Search, Plus, CreditCard, Calendar, FileText, AlertCircle, CheckCircle, Calculator, User, Receipt, X, Building, Smartphone, Banknote, ScrollText, Printer, Share2, Download, Wifi, WifiOff } from 'lucide-react';
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import { offlineManager } from '../services/offlineManager';
 
 interface FeesProps {
   cases: Case[];
   clients: Client[];
   hearings: Hearing[];
   onUpdateCase?: (updatedCase: Case) => void;
-  onAddActivity?: (activity: Omit<ActivityLog, 'id'>) => void;
-  canViewIncome?: boolean; // New prop
-  canViewExpenses?: boolean; // New prop
+  onAddActivity?: (activity: any) => void;
+  canViewIncome?: boolean;
+  canViewExpenses?: boolean;
   readOnly?: boolean;
 }
 
 const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onAddActivity, canViewIncome = true, canViewExpenses = true, readOnly = false }) => {
+  // --- Offline Status ---
+  const offlineStatus = useOfflineStatus();
+  const isOnline = offlineStatus?.online ?? true;
+  const pendingCount = offlineStatus?.pendingActions ?? 0;
+  
   // --- State ---
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'expenses'>('overview');
@@ -143,7 +150,7 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
 
   // --- Handlers ---
 
-  const handleTransactionSubmit = (e: React.FormEvent) => {
+  const handleTransactionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!onUpdateCase || !transactionData.caseId) {
       console.error('Missing required data:', { caseId: transactionData.caseId });
@@ -205,15 +212,36 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
       console.log('Processing transaction:', { 
         caseId: targetCase.id,
         transaction: newTransaction,
-        newFinance: newFinance
+        newFinance: newFinance,
+        isOnline
       });
 
-      // Always update the case with new financial data
-      console.log('Updating case with new finance:', newFinance);
-      onUpdateCase({
-        ...targetCase,
-        finance: newFinance
-      });
+      // Handle offline/online transaction
+      if (isOnline) {
+        // Online: Update case directly
+        console.log('📡 Online: Updating case directly');
+        onUpdateCase({
+          ...targetCase,
+          finance: newFinance
+        });
+      } else {
+        // Offline: Add to pending actions
+        console.log('📴 Offline: Adding transaction to pending actions');
+        await offlineManager.addPendingAction({
+          type: 'update',
+          entity: 'case',
+          data: {
+            id: targetCase.id,
+            finance: newFinance
+          }
+        });
+        
+        // Update local state immediately for better UX
+        onUpdateCase({
+          ...targetCase,
+          finance: newFinance
+        });
+      }
 
       // Log activity
       const actionType = transactionData.type === 'payment' ? 'تسجيل معاملة دفع' : 'تسجيل مصروفات';
@@ -494,6 +522,23 @@ ${typeLabel}
   return (
     <div className="space-y-6 pb-20 animate-in fade-in">
       
+      {/* Offline Status Indicator */}
+      {!isOnline && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center gap-2">
+          <WifiOff className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              وضع عدم الاتصال - سيتم حفظ المعاملات محلياً
+            </p>
+            {pendingCount > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                {pendingCount} معاملة تنتظر المزامنة
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Hidden Invoice Template */}
       <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
          {printingTrans && (
@@ -569,6 +614,11 @@ ${typeLabel}
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Wallet className="w-6 h-6 text-emerald-600" />
             الإدارة المالية
+            {isOnline ? (
+              <Wifi className="w-5 h-5 text-green-500" />
+            ) : (
+              <WifiOff className="w-5 h-5 text-amber-500" />
+            )}
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">متابعة دقيقة للأتعاب، المدفوعات، ومصروفات القضايا</p>
         </div>
@@ -881,6 +931,6 @@ ${typeLabel}
       {renderCaseFinancialDetails()}
     </div>
   );
-};
+}
 
 export default Fees;

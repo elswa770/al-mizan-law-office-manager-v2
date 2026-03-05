@@ -477,13 +477,23 @@ class OfflineManager {
         if (!data.id) {
           throw new Error('Task ID is required for update');
         }
-        await updateTask(data.id, data);
+        // Get real ID if this is a temp ID
+        const realTaskId = this.getRealId(data.id);
+        console.log(`🔄 Updating task with ID: ${data.id} (real: ${realTaskId})`);
+        
+        // Update in Firestore using real ID
+        await updateTask(realTaskId, data);
         break;
       case 'delete':
         if (!data.id) {
           throw new Error('Task ID is required for delete');
         }
-        await deleteTask(data.id);
+        // Get real ID if this is a temp ID
+        const realDeleteTaskId = this.getRealId(data.id);
+        console.log(`🗑️ Deleting task with ID: ${data.id} (real: ${realDeleteTaskId})`);
+        
+        // Delete from Firestore using real ID
+        await deleteTask(realDeleteTaskId);
         break;
       default:
         throw new Error(`Unknown task action type: ${type}`);

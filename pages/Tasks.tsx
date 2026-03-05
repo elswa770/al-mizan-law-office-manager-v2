@@ -4,8 +4,9 @@ import { Task, Case, AppUser } from '../types';
 import { 
   CheckSquare, Plus, Search, Filter, Calendar, User, Briefcase, 
   Clock, AlertCircle, MoreHorizontal, LayoutGrid, List, Trash2, Edit3,
-  CheckCircle, ArrowRight, Layout
+  CheckCircle, ArrowRight, Layout, Wifi, WifiOff
 } from 'lucide-react';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
 
 interface TasksProps {
   tasks: Task[];
@@ -21,6 +22,11 @@ interface TasksProps {
 const Tasks: React.FC<TasksProps> = ({ 
   tasks, cases, users, onAddTask, onUpdateTask, onDeleteTask, onCaseClick, readOnly = false 
 }) => {
+  // --- Offline Status ---
+  const offlineStatus = useOfflineStatus();
+  const isOnline = offlineStatus?.online ?? true;
+  const pendingCount = offlineStatus?.pendingActions ?? 0;
+  
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterUser, setFilterUser] = useState<string>('all');
@@ -292,12 +298,35 @@ const Tasks: React.FC<TasksProps> = ({
 
   return (
     <div className="space-y-6 pb-20 h-full flex flex-col">
+      
+      {/* Offline Status Indicator */}
+      {!isOnline && (
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center gap-2">
+          <WifiOff className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              وضع عدم الاتصال - سيتم حفظ المهام محلياً
+            </p>
+            {pendingCount > 0 && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                {pendingCount} مهمة تنتظر المزامنة
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* 1. Header & Stats */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
          <div>
             <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
                <CheckSquare className="w-6 h-6 text-primary-600" />
                إدارة المهام والمتابعة
+               {isOnline ? (
+                 <Wifi className="w-5 h-5 text-green-500" />
+               ) : (
+                 <WifiOff className="w-5 h-5 text-amber-500" />
+               )}
             </h2>
             <div className="flex items-center gap-4 mt-2 text-xs text-slate-500 dark:text-slate-400">
                <span className="flex items-center gap-1"><Layout className="w-3 h-3"/> إجمالي: {stats.total}</span>
