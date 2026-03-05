@@ -4310,7 +4310,16 @@ const Settings: React.FC<SettingsProps> = ({
                   />
                 </label>
                 <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-sm text-slate-600 dark:text-slate-400">تحديثات النظام والصيانة</span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">المواعيد والجلسات</span>
+                  <input 
+                    type="checkbox" 
+                    className="accent-indigo-600 w-4 h-4"
+                    checked={notificationSettings.preferences.appointments || true}
+                    onChange={e => setNotificationSettings({...notificationSettings, preferences: {...notificationSettings.preferences, appointments: e.target.checked}})}
+                  />
+                </label>
+                <label className="flex items-center justify-between cursor-pointer">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">تحديثات النظام</span>
                   <input 
                     type="checkbox" 
                     className="accent-indigo-600 w-4 h-4"

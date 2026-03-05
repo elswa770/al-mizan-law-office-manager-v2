@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار الإشعارات</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+            text-align: center;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔔 اختبار إشعارات سطح المكتب</h1>
+        
+        <div id="status" class="status info">
+            جاري التحقق من حالة الإشعارات...
+        </div>
+        
+        <button onclick="checkPermission()">🔍 التحقق من حالة الإذن</button>
+        <button onclick="requestPermission()">✅ طلب الإذن</button>
+        <button onclick="sendTestNotification()">📤 إرسال إشعار اختباري</button>
+        <button onclick="sendScheduledNotification()">⏰ إرسال إشعار مجدول (بعد 5 ثواني)</button>
+        
+        <div style="margin-top: 30px; text-align: right;">
+            <h3>📋 ملاحظات:</h3>
+            <ul style="text-align: right; direction: rtl;">
+                <li>إذا تم حظر الإشعارات، يجب إعادة تعيينها من إعدادات المتصفح</li>
+                <li>بعض المتصفحات تتطلب تفاعل المستخدم قبل إرسال الإشعارات</li>
+                <li>تأكد من أن نظام التشغيل يسمح بالإشعارات</li>
+                <li>قد تحتاج إلى إضافة الموقع للإشعارات المسموح بها في إعدادات النظام</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function checkPermission() {
+            if (!('Notification' in window)) {
+                updateStatus('❌ هذا المتصفح لا يدعم الإشعارات', 'error');
+                return;
+            }
+
+            const permission = Notification.permission;
+            switch(permission) {
+                case 'granted':
+                    updateStatus('✅ الإذن ممنوح! يمكنك تلقي الإشعارات', 'success');
+                    break;
+                case 'denied':
+                    updateStatus('❌ الإذن محجوب! يجب إعادة تعيينه من إعدادات المتصفح', 'error');
+                    break;
+                case 'default':
+                    updateStatus('⏳ لم يتم اتخاذ قرار بعد. اضغط "طلب الإذن"', 'info');
+                    break;
+            }
+        }
+
+        async function requestPermission() {
+            if (!('Notification' in window)) {
+                updateStatus('❌ هذا المتصفح لا يدعم الإشعارات', 'error');
+                return;
+            }
+
+            try {
+                const permission = await Notification.requestPermission();
+                switch(permission) {
+                    case 'granted':
+                        updateStatus('✅ تم منح الإذن بنجاح!', 'success');
+                        break;
+                    case 'denied':
+                        updateStatus('❌ تم رفض الإذن', 'error');
+                        break;
+                    default:
+                        updateStatus('⏳ لم يتم اتخاذ قرار', 'info');
+                }
+            } catch (error) {
+                updateStatus('❌ خطأ في طلب الإذن: ' + error.message, 'error');
+            }
+        }
+
+        function sendTestNotification() {
+            if (Notification.permission !== 'granted') {
+                updateStatus('❌ يجب منح الإذن أولاً', 'error');
+                return;
+            }
+
+            try {
+                const notification = new Notification('🔔 إشعار اختباري', {
+                    body: 'هذا إشعار اختباري من نظام المواعيد',
+                    icon: 'https://via.placeholder.com/64',
+                    badge: 'https://via.placeholder.com/32',
+                    tag: 'test-notification',
+                    requireInteraction: true
+                });
+
+                notification.onclick = function() {
+                    window.focus();
+                    notification.close();
+                    updateStatus('✅ تم النقر على الإشعار!', 'success');
+                };
+
+                setTimeout(() => {
+                    if (notification.close) {
+                        notification.close();
+                    }
+                }, 5000);
+
+                updateStatus('✅ تم إرسال الإشعار بنجاح!', 'success');
+            } catch (error) {
+                updateStatus('❌ خطأ في إرسال الإشعار: ' + error.message, 'error');
+            }
+        }
+
+        function sendScheduledNotification() {
+            if (Notification.permission !== 'granted') {
+                updateStatus('❌ يجب منح الإذن أولاً', 'error');
+                return;
+            }
+
+            updateStatus('⏰ سيتم إرسال إشعار بعد 5 ثواني...', 'info');
+
+            setTimeout(() => {
+                try {
+                    const notification = new Notification('⏰ إشعار مجدول', {
+                        body: 'هذا إشعار مجدول بعد 5 ثواني',
+                        icon: 'https://via.placeholder.com/64',
+                        tag: 'scheduled-notification'
+                    });
+
+                    notification.onclick = function() {
+                        window.focus();
+                        notification.close();
+                    };
+
+                    setTimeout(() => {
+                        if (notification.close) {
+                            notification.close();
+                        }
+                    }, 5000);
+
+                    updateStatus('✅ تم إرسال الإشعار المجدول بنجاح!', 'success');
+                } catch (error) {
+                    updateStatus('❌ خطأ في إرسال الإشعار المجدول: ' + error.message, 'error');
+                }
+            }, 5000);
+        }
+
+        // التحقق من الحالة عند التحميل
+        window.addEventListener('load', checkPermission);
+    </script>
+</body>
+</html>

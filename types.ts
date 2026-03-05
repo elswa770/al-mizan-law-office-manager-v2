@@ -366,6 +366,20 @@ export interface Appointment {
   tags?: string[];
   estimatedDuration?: number; // in minutes
   actualDuration?: number; // in minutes
+  
+  // Recurrence settings
+  isRecurring?: boolean;
+  recurrencePattern?: {
+    type: 'daily' | 'weekly' | 'monthly' | 'yearly';
+    interval: number; // every X days/weeks/months/years
+    daysOfWeek?: number[]; // 0-6 (Sunday-Saturday) for weekly
+    dayOfMonth?: number; // 1-31 for monthly
+    weekOfMonth?: number; // 1-5 for monthly (first, second, etc.)
+    endDate?: string; // optional end date
+    occurrences?: number; // optional number of occurrences
+  };
+  parentAppointmentId?: string; // for recurring instances
+  isException?: boolean; // for modified recurring instances
 }
 
 export interface ActivityLog {

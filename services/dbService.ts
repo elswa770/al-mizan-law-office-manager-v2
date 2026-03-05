@@ -15,7 +15,7 @@ import {
   serverTimestamp
 } from "firebase/firestore";
 import { db } from "./firebaseConfig";
-import { Client, Case, Hearing, Task, ActivityLog, AppUser, LegalReference, WorkLocation, Lawyer, LawyerDocument, LawyerPerformance } from "../types";
+import { Client, Case, Hearing, Task, ActivityLog, AppUser, LegalReference, WorkLocation, Lawyer, LawyerDocument, LawyerPerformance, Appointment } from "../types";
 
 // --- Clients ---
 export const getClients = async (): Promise<Client[]> => {
@@ -180,6 +180,67 @@ export const updateTask = async (id: string, taskData: Partial<Task>) => {
 
 export const deleteTask = async (id: string) => {
   await deleteDoc(doc(db, "tasks", id));
+};
+
+// --- Appointments ---
+export const getAppointments = async (): Promise<Appointment[]> => {
+  const querySnapshot = await getDocs(collection(db, "appointments"));
+  return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+};
+
+export const addAppointment = async (appointment: Omit<Appointment, 'id'>): Promise<string> => {
+  // تنظيف الحقول undefined قبل إرسالها إلى Firebase
+  const cleanAppointment = cleanObject(appointment);
+  
+  const docRef = await addDoc(collection(db, "appointments"), {
+    ...cleanAppointment,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  
+  return docRef.id;
+};
+
+export const updateAppointment = async (id: string, appointmentData: Partial<Appointment>) => {
+  // إزالة حقل id من البيانات قبل التنظيف
+  const { id: _, ...appointmentWithoutId } = appointmentData;
+  
+  // تنظيف الحقول undefined قبل إرسالها إلى Firebase
+  const cleanAppointment = cleanObject(appointmentWithoutId);
+  
+  const docRef = doc(db, "appointments", id);
+  try {
+    await updateDoc(docRef, {
+      ...cleanAppointment,
+      updatedAt: serverTimestamp()
+    });
+  } catch (error) {
+    // If document doesn't exist, create it with setDoc
+    if (error instanceof Error && error.message.includes('No document to update')) {
+      console.log(`⚠️ Appointment ${id} not found, creating new document`);
+      await setDoc(docRef, { 
+        ...appointmentData, 
+        id, 
+        createdAt: new Date().toISOString(), 
+        updatedAt: new Date().toISOString() 
+      });
+    } else {
+      throw error;
+    }
+  }
+};
+
+export const deleteAppointment = async (id: string) => {
+  await deleteDoc(doc(db, "appointments", id));
+};
+
+// Real-time listener for appointments
+export const subscribeToAppointments = (callback: (appointments: Appointment[]) => void) => {
+  const q = query(collection(db, "appointments"), orderBy("date", "desc"));
+  return onSnapshot(q, (snapshot) => {
+    const appointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
+    callback(appointments);
+  });
 };
 
 // --- Users (Lawyers/Staff) ---

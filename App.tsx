@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense, useCallback } from 'react';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
 import { Lawyer, LawyerStatus, LawyerSpecialization, LawyerRole } from './types';
-import { createLawyer, updateLawyer, deleteLawyer, getLawyers } from './services/dbservice';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Cases from './pages/Cases';
@@ -27,24 +26,22 @@ const Calculators = lazy(() => import('./pages/Calculators'));
 const Archive = lazy(() => import('./pages/Archive'));
 import { Hearing, Case, Client, HearingStatus, Task, ActivityLog, AppUser, PermissionLevel, LegalReference, Appointment } from './types';
 import { ShieldAlert } from 'lucide-react';
-import { 
+import {
   getClients, addClient, updateClient, deleteClient,
-  getCases, addCase, updateCase,
+  getCases, addCase, updateCase, deleteCase,
   getHearings, addHearing, updateHearing, deleteHearing,
   getTasks, addTask, updateTask, deleteTask,
   getAppUsers, addAppUser, updateAppUser, deleteAppUser,
-  getActivities, addActivity,
-  getLegalReferences, addLegalReference
+  getAppointments, addAppointment, updateAppointment, deleteAppointment, subscribeToAppointments,
+  addActivity, getActivities, subscribeToActivities,
+  getLegalReferences, addLegalReference, updateLegalReference, deleteLegalReference,
+  getWorkLocations, addWorkLocation, updateWorkLocation, deleteWorkLocation,
+  getLawyers, addLawyer, updateLawyer, deleteLawyer
 } from './services/dbService';
-import { 
-  loginUser, 
-  logoutUser, 
-  onAuthStateChange, 
-  getUserProfile,
-  AuthUser 
-} from './services/authService';
 import { auth, db } from './services/firebaseConfig';
 import { offlineManager } from './services/offlineManager';
+import { onAuthStateChanged } from 'firebase/auth';
+import type { User as AuthUser } from 'firebase/auth';
 
 // Helper function for default permissions
 const getDefaultPermissions = () => [
@@ -153,7 +150,7 @@ function App() {
 
   // --- Firebase Auth State Management ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChange(async (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setAuthUser(user);
         setIsAuthenticated(true);
@@ -241,18 +238,19 @@ function App() {
       setError(null);
       
       try {
-        let casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData;
+        let casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData, appointmentsData;
         
         if (navigator.onLine) {
           // Online: Load from Firebase
-          [casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData] = await Promise.all([
+          [casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData, appointmentsData] = await Promise.all([
             getCases(),
             getHearings(),
             getClients(),
             getTasks(),
             getActivities(),
             getAppUsers(),
-            getLawyers()
+            getLawyers(),
+            getAppointments()
           ]);
           
           // Cache the data for offline use
@@ -260,15 +258,17 @@ function App() {
             offlineManager.cacheData('cases', casesData),
             offlineManager.cacheData('clients', clientsData),
             offlineManager.cacheData('hearings', hearingsData),
-            offlineManager.cacheData('tasks', tasksData)
+            offlineManager.cacheData('tasks', tasksData),
+            offlineManager.cacheData('appointments', appointmentsData)
           ]);
         } else {
           // Offline: Load from cache
-          [casesData, clientsData, hearingsData, tasksData] = await Promise.all([
+          [casesData, clientsData, hearingsData, tasksData, appointmentsData] = await Promise.all([
             offlineManager.getCachedData('cases'),
             offlineManager.getCachedData('clients'),
             offlineManager.getCachedData('hearings'),
-            offlineManager.getCachedData('tasks')
+            offlineManager.getCachedData('tasks'),
+            offlineManager.getCachedData('appointments')
           ]);
           
           activitiesData = [];
@@ -280,7 +280,7 @@ function App() {
         setHearings(hearingsData || []);
         setClients(clientsData || []);
         setTasks(tasksData || []);
-        setAppointments([]); // Initialize with empty array for now
+        setAppointments(appointmentsData || []);
         setActivities(activitiesData || []);
         setUsers(usersData || []);
         setLawyers(lawyersData || []);
@@ -293,17 +293,19 @@ function App() {
         // Try to load from cache if online loading fails
         if (navigator.onLine) {
           try {
-            const [casesData, clientsData, hearingsData, tasksData] = await Promise.all([
+            const [casesData, clientsData, hearingsData, tasksData, appointmentsData] = await Promise.all([
               offlineManager.getCachedData('cases'),
               offlineManager.getCachedData('clients'),
               offlineManager.getCachedData('hearings'),
-              offlineManager.getCachedData('tasks')
+              offlineManager.getCachedData('tasks'),
+              offlineManager.getCachedData('appointments')
             ]);
             
             setCases(casesData || []);
             setClients(clientsData || []);
             setHearings(hearingsData || []);
             setTasks(tasksData || []);
+            setAppointments(appointmentsData || []);
             setActivities([]);
             setUsers([]);
             setLawyers([]);
@@ -1628,48 +1630,54 @@ function App() {
   // --- Appointments Handlers ---
   const handleAddAppointment = async (newAppointment: Appointment) => {
     try {
+      console.log('📅 Adding appointment:', newAppointment);
+      
+      // Always update local state immediately for better UX
+      const tempId = `temp_appointment_${Date.now()}`;
+      const appointmentWithId = { ...newAppointment, id: tempId };
+      
+      setAppointments(prev => {
+        const updated = [appointmentWithId, ...prev];
+        console.log('📅 Appointments after add:', updated);
+        return updated;
+      });
+      
+      // Cache the updated data
+      await offlineManager.cacheData('appointments', [appointmentWithId, ...appointments]);
+      
       // Check if online and try to save to Firebase
       const isOnline = await checkNetworkConnectivity();
       
       if (isOnline) {
         try {
-          // For now, add to local state (Firebase integration can be added later)
-          const tempId = `temp_appointment_${Date.now()}`;
-          setAppointments(prev => [{ ...newAppointment, id: tempId }, ...prev]);
+          // Save to Firebase
+          const firebaseId = await addAppointment(newAppointment);
+          console.log('✅ Appointment saved to Firebase with ID:', firebaseId);
           
-          // Cache the updated data
-          await offlineManager.cacheData('appointments', [{ ...newAppointment, id: tempId }, ...appointments]);
+          // Update local state with Firebase ID
+          setAppointments(prev => {
+            const updated = prev.map(a => 
+              a.id === appointmentWithId.id ? { ...newAppointment, id: firebaseId } : a
+            );
+            console.log('📅 Appointments after Firebase save:', updated);
+            return updated;
+          });
           
         } catch (error) {
-          console.error('❌ App.tsx - Error saving appointment:', error);
+          console.error('❌ App.tsx - Error saving appointment to Firebase:', error);
           
-          // Save to offline queue if fails
-          const tempId = `temp_appointment_${Date.now()}`;
-          setAppointments(prev => [{ ...newAppointment, id: tempId }, ...prev]);
-          
+          // Save to offline queue if Firebase fails
           await offlineManager.addPendingAction({
             type: 'create',
             entity: 'appointment',
             data: newAppointment
           });
           
-          // Cache locally with updated data
-          await offlineManager.cacheData('appointments', [{ ...newAppointment, id: tempId }, ...appointments]);
+          console.log('📱 Appointment added to offline queue');
         }
       } else {
-        // Offline mode - save locally and add to queue
-        console.log('📱 App.tsx - Offline mode, saving appointment locally');
-        const tempId = `temp_appointment_${Date.now()}`;
-        
-        // Update local state first
-        const newAppointmentWithId = { ...newAppointment, id: tempId };
-        const updatedAppointments = [newAppointmentWithId, ...appointments];
-        
-        setAppointments([...updatedAppointments]);
-        
-        // Force re-render of components
-        setForceUpdate(prev => prev + 1);
-        setRefreshKey(prev => prev + 1);
+        // Offline mode - add to pending actions
+        console.log('📱 Offline mode - adding to queue');
         
         await offlineManager.addPendingAction({
           type: 'create',
@@ -1677,9 +1685,7 @@ function App() {
           data: newAppointment
         });
         
-        // Cache locally with updated data
-        await offlineManager.cacheData('appointments', updatedAppointments);
-        console.log('📱 App.tsx - Appointment added and cached successfully');
+        console.log('📱 Appointment saved offline');
       }
       
       // Log activity (works offline too)
@@ -1690,6 +1696,7 @@ function App() {
         user: currentUser?.name || 'مستخدم',
         timestamp: new Date().toISOString()
       });
+      
     } catch (err) {
       console.error('Error adding appointment:', err);
       setError('فشل في إضافة الموعد');
@@ -1703,7 +1710,11 @@ function App() {
       
       if (isOnline) {
         try {
-          // For now, update local state (Firebase integration can be added later)
+          // Update in Firebase
+          await updateAppointment(updatedAppointment.id, updatedAppointment);
+          console.log('✅ Appointment updated in Firebase');
+          
+          // Update local state
           setAppointments(prev => {
             const updatedAppointments = prev.map(a => {
               if (a.id === updatedAppointment.id) {
@@ -1714,15 +1725,10 @@ function App() {
             return updatedAppointments;
           });
           
-          // Cache the updated data
-          await offlineManager.cacheData('appointments', appointments.map(a => 
-            a.id === updatedAppointment.id ? { ...a, ...updatedAppointment } : a
-          ));
-          
         } catch (error) {
-          console.error('❌ App.tsx - Error updating appointment:', error);
+          console.error('❌ App.tsx - Error updating appointment in Firebase:', error);
           
-          // Save update to offline queue if fails
+          // Save update to offline queue if Firebase fails
           setAppointments(prev => {
             const updatedAppointments = prev.map(a => {
               if (a.id === updatedAppointment.id) {
@@ -1792,11 +1798,15 @@ function App() {
         
         if (isOnline) {
           try {
-            // For now, delete from local state (Firebase integration can be added later)
+            // Delete from Firebase
+            await deleteAppointment(appointmentId);
+            console.log('✅ Appointment deleted from Firebase');
+            
+            // Update local state
             setAppointments(prev => prev.filter(a => a.id !== appointmentId));
             
           } catch (error) {
-            console.error('❌ App.tsx - Error deleting appointment:', error);
+            console.error('❌ App.tsx - Error deleting appointment from Firebase:', error);
             
             // Update local state first
             const updatedAppointments = appointments.filter(a => a.id !== appointmentId);
@@ -2174,6 +2184,7 @@ function App() {
         />;
       case 'appointments':
         return <Appointments 
+          key={`appointments-${forceUpdate}-${refreshKey}`}
           appointments={appointments} 
           cases={cases}
           clients={clients}
@@ -2183,6 +2194,8 @@ function App() {
           onDeleteAppointment={handleDeleteAppointment}
           onCaseClick={handleCaseClick}
           readOnly={isReadOnly('appointments')} // Pass prop
+          forceUpdate={forceUpdate}
+          refreshKey={refreshKey}
         />;
       case 'documents':
         return <Documents 

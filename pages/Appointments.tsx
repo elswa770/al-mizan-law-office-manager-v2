@@ -9,6 +9,10 @@ import {
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import { offlineManager } from '../services/offlineManager';
 import { Appointment } from '../types';
+import MonthlyCalendar from '../components/MonthlyCalendar';
+import notificationService from '../services/notificationService';
+import calendarSyncService from '../services/calendarSyncService';
+import RecurrenceManager from '../components/RecurrenceManager';
 
 // --- Types ---
 export interface AppointmentStats {
@@ -30,9 +34,11 @@ interface AppointmentsProps {
   users: any[];
   onAddAppointment: (appointment: Appointment) => void;
   onUpdateAppointment: (appointment: Appointment) => void;
-  onDeleteAppointment: (appointmentId: string) => void;
+  onDeleteAppointment: (id: string) => void;
   onCaseClick?: (caseId: string) => void;
   readOnly?: boolean;
+  forceUpdate?: number;
+  refreshKey?: number;
 }
 
 const Appointments: React.FC<AppointmentsProps> = ({
@@ -44,7 +50,9 @@ const Appointments: React.FC<AppointmentsProps> = ({
   onUpdateAppointment,
   onDeleteAppointment,
   onCaseClick,
-  readOnly = false
+  readOnly = false,
+  forceUpdate = 0,
+  refreshKey = 0
 }) => {
   // --- Offline Status ---
   const offlineStatus = useOfflineStatus();
@@ -53,27 +61,39 @@ const Appointments: React.FC<AppointmentsProps> = ({
 
   // --- State ---
   const [viewMode, setViewMode] = useState<'calendar' | 'list' | 'stats'>('calendar');
+  const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  // Initialize with today's date
+  const today = new Date();
+  // Use local date instead of UTC to avoid timezone issues
+  const todayString = today.getFullYear() + '-' + 
+    String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+    String(today.getDate()).padStart(2, '0');
+  
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [selectedDateString, setSelectedDateString] = useState(todayString);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState<Appointment | null>(null);
+  const [expandedWeekDay, setExpandedWeekDay] = useState<number | null>(null);
+  
+  // Debug log for initial date
+  console.log('📅 Initial Date Setup - Today:', todayString, 'Selected Date:', selectedDateString, 'Local Date:', today.toLocaleDateString('ar-SA'));
   const [formData, setFormData] = useState<Partial<Appointment>>({
     title: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: todayString,
     startTime: '09:00',
     endTime: '10:00',
     type: 'meeting',
     priority: 'medium',
     status: 'scheduled',
     location: '',
-    onlineMeetingUrl: '',
-    phoneNumber: '',
-    attendees: [],
-    relatedCaseId: '',
     relatedClientId: '',
+    relatedCaseId: '',
+    attendees: [],
     reminderMinutes: 15,
     notes: '',
     tags: [],
@@ -83,7 +103,7 @@ const Appointments: React.FC<AppointmentsProps> = ({
 
   // --- Filtering ---
   const filteredAppointments = useMemo(() => {
-    return appointments.filter(appointment => {
+    const filtered = appointments.filter(appointment => {
       const matchesSearch = appointment.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             appointment.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             appointment.tags?.some(tag => tag.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -92,7 +112,16 @@ const Appointments: React.FC<AppointmentsProps> = ({
       
       return matchesSearch && matchesType && matchesStatus;
     });
-  }, [appointments, searchTerm, filterType, filterStatus]);
+    
+    // Debug logs
+    console.log('🔍 Debug - Appointments:', appointments);
+    console.log('🔍 Debug - Selected Date String:', selectedDateString);
+    console.log('🔍 Debug - Selected Date:', selectedDate);
+    console.log('🔍 Debug - Filtered Appointments:', filtered);
+    console.log('🔍 Debug - Today Appointments:', filtered.filter(a => a.date === selectedDateString));
+    
+    return filtered;
+  }, [appointments, searchTerm, filterType, filterStatus, forceUpdate, refreshKey, selectedDateString]);
 
   // --- Stats ---
   const stats = useMemo((): AppointmentStats => {
@@ -142,6 +171,31 @@ const Appointments: React.FC<AppointmentsProps> = ({
     };
   }, [appointments]);
 
+  // --- Notifications Effect ---
+  useEffect(() => {
+    // Schedule notifications for all appointments
+    appointments.forEach(appointment => {
+      notificationService.scheduleNotifications(appointment);
+    });
+
+    // Listen for notification clicks
+    const handleNotificationClick = (event: CustomEvent) => {
+      const { appointmentId } = event.detail;
+      const appointment = appointments.find(a => a.id === appointmentId);
+      if (appointment) {
+        handleOpenModal(appointment);
+      }
+    };
+
+    window.addEventListener('notification-click', handleNotificationClick as EventListener);
+    window.addEventListener('in-app-notification', handleNotificationClick as EventListener);
+
+    return () => {
+      window.removeEventListener('notification-click', handleNotificationClick as EventListener);
+      window.removeEventListener('in-app-notification', handleNotificationClick as EventListener);
+    };
+  }, [appointments]);
+
   // --- Handlers ---
   const handleOpenModal = (appointment?: Appointment) => {
     if (appointment) {
@@ -152,7 +206,7 @@ const Appointments: React.FC<AppointmentsProps> = ({
       setFormData({
         title: '',
         description: '',
-        date: new Date().toISOString().split('T')[0],
+        date: selectedDate.toISOString().split('T')[0],
         startTime: '09:00',
         endTime: '10:00',
         type: 'meeting',
@@ -174,6 +228,75 @@ const Appointments: React.FC<AppointmentsProps> = ({
     setIsModalOpen(true);
   };
 
+  const handleDateClick = (date: Date) => {
+    const dateString = date.toISOString().split('T')[0];
+    setSelectedDate(date);
+    setSelectedDateString(dateString);
+    
+    // Open modal for new appointment on the selected date
+    handleOpenModal();
+  };
+
+  const handleAppointmentClick = (appointment: Appointment) => {
+    handleOpenModal(appointment);
+  };
+
+  // Test notification handler
+  const handleTestNotification = async () => {
+    try {
+      // Request permission if not granted
+      const hasPermission = await notificationService.requestPermission();
+      
+      if (!hasPermission) {
+        alert('يرجى السماح بالإشعارات من إعدادات المتصفح');
+        return;
+      }
+
+      // Send test notification
+      await notificationService.testNotification();
+      
+    } catch (error) {
+      console.error('Test notification error:', error);
+      alert('فشل إرسال الإشعار: ' + (error as Error).message);
+    }
+  };
+
+  // Calendar sync handler
+  const handleSyncCalendars = async () => {
+    try {
+      const providers = calendarSyncService.getConnectedProviders();
+      
+      if (providers.length === 0) {
+        // Show connect calendar modal or message
+        alert('يرجى ربط حساب تقويم خارجي أولاً (Google Calendar أو Outlook)');
+        return;
+      }
+
+      // Show loading state
+      const syncButton = document.querySelector('[title="مزامنة مع التقويم الخارجي"]') as HTMLButtonElement;
+      if (syncButton) {
+        syncButton.disabled = true;
+        syncButton.innerHTML = '<div class="w-4 h-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div> جاري المزامنة...';
+      }
+
+      await calendarSyncService.syncAllAppointments(appointments);
+      
+      // Show success message
+      alert('تمت مزامنة المواعيد بنجاح!');
+      
+    } catch (error) {
+      console.error('Calendar sync error:', error);
+      alert('فشلت المزامنة: ' + (error as Error).message);
+    } finally {
+      // Reset button state
+      const syncButton = document.querySelector('[title="مزامنة مع التقويم الخارجي"]') as HTMLButtonElement;
+      if (syncButton) {
+        syncButton.disabled = false;
+        syncButton.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path></svg> مزامنة التقويم';
+      }
+    }
+  };
+
   const handleSaveAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.title) return;
@@ -186,13 +309,24 @@ const Appointments: React.FC<AppointmentsProps> = ({
         updatedAt: new Date().toISOString()
       } as Appointment;
 
-      if (isOnline) {
-        // Online: Update directly
-        if (editingAppointment) {
-          onUpdateAppointment(appointmentData);
-        } else {
-          onAddAppointment(appointmentData);
+      // Always update local state immediately for better UX
+      if (editingAppointment) {
+        onUpdateAppointment(appointmentData);
+      } else {
+        onAddAppointment(appointmentData);
+        
+        // Auto-select the date of the new appointment if it's today
+        const today = new Date().toISOString().split('T')[0];
+        if (appointmentData.date === today) {
+          setSelectedDateString(today);
+          setSelectedDate(new Date(today));
         }
+      }
+
+      // Then handle online/offline logic
+      if (isOnline) {
+        // Online: Already handled above
+        console.log('✅ Appointment saved online');
       } else {
         // Offline: Add to pending actions
         await offlineManager.addPendingAction({
@@ -200,16 +334,29 @@ const Appointments: React.FC<AppointmentsProps> = ({
           entity: 'appointment',
           data: appointmentData
         });
-        
-        // Update local state immediately for better UX
-        if (editingAppointment) {
-          onUpdateAppointment(appointmentData);
-        } else {
-          onAddAppointment(appointmentData);
-        }
+        console.log('📱 Appointment saved offline');
       }
 
+      // Close modal
       setIsModalOpen(false);
+      
+      // Reset form
+      setEditingAppointment(null);
+      setFormData({
+        title: '',
+        description: '',
+        date: new Date().toISOString().split('T')[0],
+        startTime: '09:00',
+        endTime: '10:00',
+        type: 'meeting',
+        priority: 'medium',
+        status: 'scheduled'
+      });
+      
+      // Show success message
+      const action = editingAppointment ? 'تعديل' : 'إضافة';
+      alert(`✅ تم ${action} الموعد بنجاح!`);
+      
     } catch (error) {
       console.error('Error saving appointment:', error);
       alert('حدث خطأ أثناء حفظ الموعد');
@@ -267,7 +414,30 @@ const Appointments: React.FC<AppointmentsProps> = ({
     }
   };
 
-  // --- Helper Functions ---
+  // --- Auto-update selected date when view changes ---
+  useEffect(() => {
+    if (calendarView === 'day') {
+      // Always use today's date for day view
+      const today = new Date();
+      // Use local date instead of UTC to avoid timezone issues
+      const todayString = today.getFullYear() + '-' + 
+        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(today.getDate()).padStart(2, '0');
+      setSelectedDate(today);
+      setSelectedDateString(todayString);
+      console.log('📅 Auto-updated to today for day view:', todayString, 'Local Date:', today.toLocaleDateString('ar-SA'));
+    } else if (calendarView === 'month') {
+      // Always use today's date for month view
+      const today = new Date();
+      // Use local date instead of UTC to avoid timezone issues
+      const todayString = today.getFullYear() + '-' + 
+        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(today.getDate()).padStart(2, '0');
+      setSelectedDate(today);
+      setSelectedDateString(todayString);
+      console.log('📅 Auto-updated to today for month view:', todayString, 'Local Date:', today.toLocaleDateString('ar-SA'));
+    }
+  }, [calendarView]);
   const getTypeIcon = (type: Appointment['type']) => {
     switch (type) {
       case 'meeting': return <Users className="w-4 h-4" />;
@@ -501,23 +671,306 @@ const Appointments: React.FC<AppointmentsProps> = ({
             التقويم
           </h3>
           <div className="flex gap-2">
+            <select
+              value={calendarView}
+              onChange={(e) => setCalendarView(e.target.value as 'month' | 'week' | 'day')}
+              className="border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+            >
+              <option value="month">شهري</option>
+              <option value="week">أسبوعي</option>
+              <option value="day">يومي</option>
+            </select>
             <input
               type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              value={selectedDateString}
+              onChange={(e) => {
+                const newDate = new Date(e.target.value);
+                setSelectedDate(newDate);
+                setSelectedDateString(e.target.value);
+              }}
               className="border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
             />
           </div>
         </div>
       </div>
       
-      {/* Appointments for Selected Date */}
-      <div className="space-y-4">
-        {filteredAppointments
-          .filter(a => a.date === selectedDate)
-          .sort((a, b) => a.startTime.localeCompare(b.startTime))
-          .map(renderAppointmentCard)}
-      </div>
+      {/* Monthly Calendar */}
+      {calendarView === 'month' && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-3">
+            <MonthlyCalendar
+              appointments={filteredAppointments}
+              onAppointmentClick={handleAppointmentClick}
+              onDateClick={handleDateClick}
+              selectedDate={selectedDate}
+            />
+          </div>
+          
+          {/* Side Panel - Selected Date Details */}
+          <div className="space-y-4">
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+              <h4 className="font-semibold text-slate-800 dark:text-white mb-4">
+                مواعيد {selectedDate.toLocaleDateString('ar-SA')}
+              </h4>
+              <div className="space-y-3 max-h-[700px] overflow-y-auto">
+                {/* Debug info */}
+                <div className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                  التاريخ المحدد: {selectedDateString} | إجمالي المواعيد: {appointments.length} | مواعيد اليوم: {filteredAppointments.filter(a => a.date === selectedDateString).length}
+                </div>
+                {filteredAppointments
+                  .filter(a => a.date === selectedDateString)
+                  .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                  .map(renderAppointmentCard)}
+                {filteredAppointments.filter(a => a.date === selectedDateString).length === 0 && (
+                  <div className="text-center py-8">
+                    <p className="text-slate-500 dark:text-slate-400">
+                      لا توجد مواعيد في هذا اليوم
+                    </p>
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-2">
+                      التاريخ: {selectedDateString}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Week View */}
+      {calendarView === 'week' && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="p-6">
+            <h3 className="font-semibold text-slate-800 dark:text-white mb-4">
+              عرض الأسبوعي
+            </h3>
+            <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: 7 }, (_, i) => {
+                const date = new Date(selectedDate);
+                const dayStart = new Date(date.setDate(date.getDate() - date.getDay() + i));
+                const dayEnd = new Date(dayStart);
+                dayEnd.setHours(23, 59, 59, 999);
+                const dayString = dayStart.toISOString().split('T')[0];
+                const dayAppointments = filteredAppointments.filter(a => a.date === dayString);
+                const isExpanded = expandedWeekDay === i;
+                const isToday = dayString === new Date().toISOString().split('T')[0];
+                
+                return (
+                  <div 
+                    key={i} 
+                    className={`border rounded-lg p-2 min-h-[140px] transition-all ${
+                      isToday 
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                        : 'border-slate-200 dark:border-slate-700'
+                    } ${isExpanded ? 'col-span-2 row-span-2' : ''}`}
+                  >
+                    <div className="flex justify-between items-center mb-2">
+                      <div className={`text-xs font-medium ${
+                        isToday 
+                          ? 'text-indigo-600 dark:text-indigo-400' 
+                          : 'text-slate-600 dark:text-slate-400'
+                      }`}>
+                        {dayStart.toLocaleDateString('ar-SA', { weekday: 'short', day: 'numeric' })}
+                      </div>
+                      {dayAppointments.length > 0 && (
+                        <button
+                          onClick={() => setExpandedWeekDay(isExpanded ? null : i)}
+                          className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
+                        >
+                          {isExpanded ? '✕' : '+'}
+                        </button>
+                      )}
+                    </div>
+                    
+                    {isExpanded ? (
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                        <div className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">
+                          جميع مواعيد اليوم ({dayAppointments.length})
+                        </div>
+                        {dayAppointments
+                          .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                          .map(appointment => (
+                            <div
+                              key={appointment.id}
+                              className="p-2 border border-slate-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 hover:bg-slate-50 dark:hover:bg-slate-600 cursor-pointer"
+                              onClick={() => handleAppointmentClick(appointment)}
+                            >
+                              <div className="flex justify-between items-start mb-1">
+                                <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                                  {appointment.startTime} - {appointment.endTime}
+                                </div>
+                                <span className={`text-xs px-1 py-0.5 rounded ${getPriorityColor(appointment.priority)}`}>
+                                  {appointment.priority === 'high' ? 'عاجل' : appointment.priority === 'medium' ? 'متوسط' : 'عادي'}
+                                </span>
+                              </div>
+                              <div className="text-sm font-medium text-slate-800 dark:text-white mb-1">
+                                {appointment.title}
+                              </div>
+                              {appointment.description && (
+                                <div className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2">
+                                  {appointment.description}
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1 mt-1">
+                                <span className={`text-xs px-1 py-0.5 rounded ${getTypeColor(appointment.type)}`}>
+                                  {appointment.type === 'meeting' ? 'اجتماع' : 
+                                   appointment.type === 'court' ? 'محكمة' :
+                                   appointment.type === 'client' ? 'موكل' :
+                                   appointment.type === 'video_call' ? 'مكالمة فيديو' :
+                                   appointment.type === 'phone_call' ? 'مكالمة هاتفية' :
+                                   appointment.type === 'internal' ? 'داخلي' : 'أخرى'}
+                                </span>
+                              </div>
+                              {!readOnly && (
+                                <div className="flex gap-1 mt-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenModal(appointment);
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                                    title="تعديل"
+                                  >
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteAppointment(appointment.id);
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                                    title="حذف"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {dayAppointments.length === 0 ? (
+                          <div className="text-xs text-slate-400 dark:text-slate-500 text-center py-2">
+                            لا توجد مواعيد
+                          </div>
+                        ) : (
+                          <>
+                            {dayAppointments
+                              .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                              .slice(0, 3)
+                              .map(appointment => (
+                                <div
+                                  key={appointment.id}
+                                  className="text-xs p-1 rounded bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 truncate cursor-pointer hover:bg-indigo-200 dark:hover:bg-indigo-900/50"
+                                  onClick={() => handleAppointmentClick(appointment)}
+                                >
+                                  {appointment.startTime} {appointment.title}
+                                </div>
+                              ))}
+                            {dayAppointments.length > 3 && (
+                              <div 
+                                className="text-xs text-slate-500 dark:text-slate-400 cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400"
+                                onClick={() => setExpandedWeekDay(i)}
+                              >
+                                +{dayAppointments.length - 3} أخرى
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Day View */}
+      {calendarView === 'day' && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+          <div className="p-6">
+            <h3 className="font-semibold text-slate-800 dark:text-white mb-4">
+              عرض اليومي - {selectedDate.toLocaleDateString('ar-SA')}
+            </h3>
+            <div className="space-y-2">
+              {filteredAppointments
+                .filter(a => a.date === selectedDateString)
+                .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                .map(appointment => (
+                  <div
+                    key={appointment.id}
+                    className="flex items-center gap-4 p-4 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
+                    onClick={() => handleAppointmentClick(appointment)}
+                  >
+                    <div className="flex-shrink-0">
+                      <div className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                        {appointment.startTime}
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-500">
+                        {appointment.endTime}
+                      </div>
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-medium text-slate-800 dark:text-white">
+                        {appointment.title}
+                      </div>
+                      {appointment.description && (
+                        <div className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                          {appointment.description}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`text-xs px-2 py-1 rounded ${getPriorityColor(appointment.priority)}`}>
+                          {appointment.priority === 'high' ? 'عاجل' : appointment.priority === 'medium' ? 'متوسط' : 'عادي'}
+                        </span>
+                        <span className={`text-xs px-2 py-1 rounded ${getTypeColor(appointment.type)}`}>
+                          {appointment.type === 'meeting' ? 'اجتماع' : 
+                           appointment.type === 'court' ? 'محكمة' :
+                           appointment.type === 'client' ? 'موكل' :
+                           appointment.type === 'video_call' ? 'مكالمة فيديو' :
+                           appointment.type === 'phone_call' ? 'مكالمة هاتفية' :
+                           appointment.type === 'internal' ? 'داخلي' : 'أخرى'}
+                        </span>
+                      </div>
+                    </div>
+                    {!readOnly && (
+                      <div className="flex gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenModal(appointment);
+                          }}
+                          className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteAppointment(appointment.id);
+                          }}
+                          className="p-2 text-slate-400 hover:text-red-600 dark:hover:text-red-400"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              {filteredAppointments.filter(a => a.date === selectedDateString).length === 0 && (
+                <div className="text-center py-12">
+                  <p className="text-slate-500 dark:text-slate-400">
+                    لا توجد مواعيد في هذا اليوم
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -664,6 +1117,22 @@ const Appointments: React.FC<AppointmentsProps> = ({
                 موعد جديد
               </button>
             )}
+            <button 
+              onClick={handleSyncCalendars}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-colors"
+              title="مزامنة مع التقويم الخارجي"
+            >
+              <Download className="w-4 h-4" />
+              مزامنة التقويم
+            </button>
+            <button 
+              onClick={handleTestNotification}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-colors"
+              title="اختبار الإشعارات"
+            >
+              <Bell className="w-4 h-4" />
+              اختبار الإشعار
+            </button>
           </div>
         </div>
       </div>
@@ -1060,6 +1529,19 @@ const Appointments: React.FC<AppointmentsProps> = ({
                   </div>
                 </div>
               </div>
+              
+              {/* Recurrence Settings */}
+              <RecurrenceManager
+                isRecurring={formData.isRecurring || false}
+                recurrencePattern={formData.recurrencePattern}
+                onRecurrenceChange={(isRecurring, pattern) => {
+                  setFormData({
+                    ...formData,
+                    isRecurring,
+                    recurrencePattern: pattern
+                  });
+                }}
+              />
               
               {/* Actions */}
               <div className="flex gap-3 pt-4">
