@@ -40,7 +40,8 @@ const MODULES = [
   { id: 'cases', label: 'إدارة القضايا' },
   { id: 'clients', label: 'إدارة الموكلين' },
   { id: 'hearings', label: 'الجلسات والمواعيد' },
-  { id: 'tasks', label: 'إدارة المهام' }, 
+  { id: 'tasks', label: 'إدارة المهام' },
+  { id: 'appointments', label: 'جدول المواعيد والأعمال' },
   { id: 'documents', label: 'الأرشيف والمستندات' },
   { id: 'archive', label: 'إدارة الأرشيف' }, // Added Archive module
   { id: 'lawyers', label: 'إدارة المحامين' }, // Added Lawyers module

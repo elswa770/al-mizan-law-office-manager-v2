@@ -95,6 +95,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notif
       title: 'الرئيسية',
       items: [
         { id: 'dashboard', label: 'لوحة التحكم', icon: LayoutDashboard },
+        { id: 'appointments', label: 'جدول المواعيد والأعمال', icon: Calendar },
         { id: 'ai-assistant', label: 'المساعد الذكي', icon: BrainCircuit, special: true },
       ]
     },

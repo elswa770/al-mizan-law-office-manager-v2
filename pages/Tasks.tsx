@@ -288,6 +288,32 @@ const Tasks: React.FC<TasksProps> = ({
         </div>
       )}
       
+      {/* Attachments */}
+      {task.attachments && task.attachments.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+          <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1">
+            <Paperclip className="w-3 h-3" />
+            المرفقات ({task.attachments.length})
+          </div>
+          <div className="space-y-1">
+            {task.attachments.map((attachment, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Paperclip className="w-3 h-3 text-slate-400" />
+                <a 
+                  href={attachment} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate"
+                  title={attachment}
+                >
+                  {attachment.split('/').pop() || attachment}
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
       {/* Completion Date */}
       {task.completedAt && (
         <div className="mt-2 text-xs text-green-600 dark:text-green-400">
@@ -704,6 +730,87 @@ const Tasks: React.FC<TasksProps> = ({
                                  {formData.progress || 0}%
                               </span>
                            </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* --- المرفقات --- */}
+                  <div className="border-b pb-4 mb-4">
+                     <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                        <Paperclip className="w-4 h-4" />
+                        المرفقات
+                     </h4>
+                     
+                     <div className="space-y-3">
+                        {/* قائمة المرفقات الحالية */}
+                        {formData.attachments && formData.attachments.length > 0 && (
+                           <div className="space-y-2">
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">المرفقات الحالية:</label>
+                              {formData.attachments.map((attachment, index) => (
+                                 <div key={index} className="flex items-center justify-between p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                                    <div className="flex items-center gap-2 flex-1">
+                                       <Paperclip className="w-4 h-4 text-slate-400" />
+                                       <a 
+                                          href={attachment} 
+                                          target="_blank" 
+                                          rel="noopener noreferrer"
+                                          className="text-sm text-blue-600 dark:text-blue-400 hover:underline truncate"
+                                       >
+                                          {attachment.split('/').pop() || attachment}
+                                       </a>
+                                    </div>
+                                    <button
+                                       type="button"
+                                       onClick={() => {
+                                          const newAttachments = formData.attachments?.filter((_, i) => i !== index) || [];
+                                          setFormData({...formData, attachments: newAttachments});
+                                       }}
+                                       className="text-red-500 hover:text-red-700 p-1"
+                                    >
+                                       <Trash2 className="w-4 h-4" />
+                                    </button>
+                                 </div>
+                              ))}
+                           </div>
+                        )}
+                        
+                        {/* إضافة مرفق جديد */}
+                        <div>
+                           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">إضافة مرفق جديد:</label>
+                           <div className="flex gap-2">
+                              <input
+                                 type="text"
+                                 className="flex-1 border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                                 value={formData.newAttachment || ''}
+                                 onChange={e => setFormData({...formData, newAttachment: e.target.value})}
+                                 placeholder="رابط الملف أو اسمه..."
+                              />
+                              <button
+                                 type="button"
+                                 onClick={() => {
+                                    if (formData.newAttachment && formData.newAttachment.trim()) {
+                                       const currentAttachments = formData.attachments || [];
+                                       setFormData({
+                                          ...formData, 
+                                          attachments: [...currentAttachments, formData.newAttachment.trim()],
+                                          newAttachment: ''
+                                       });
+                                    }
+                                 }}
+                                 className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-2"
+                              >
+                                 <Paperclip className="w-4 h-4" />
+                                 إضافة
+                              </button>
+                           </div>
+                        </div>
+                        
+                        {/* رفع ملف (مستقبلاً) */}
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                           <span className="flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              ملاحظة: حالياً يدعم إضافة الروابط فقط. رفع الملفات سيتم إضافته لاحقاً.
+                           </span>
                         </div>
                      </div>
                   </div>

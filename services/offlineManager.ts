@@ -6,7 +6,7 @@ import { Case, Client, Hearing, Task, ActivityLog } from '../types';
 export interface OfflineAction {
   id: string;
   type: 'create' | 'update' | 'delete';
-  entity: 'case' | 'client' | 'hearing' | 'task';
+  entity: 'case' | 'client' | 'hearing' | 'task' | 'appointment';
   data: any;
   timestamp: string;
   retryCount: number;

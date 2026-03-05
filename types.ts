@@ -340,6 +340,34 @@ export interface Task {
   notes?: string; // ملاحظات إضافية
 }
 
+export interface Appointment {
+  id: string;
+  title: string;
+  description?: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  type: 'meeting' | 'court' | 'client' | 'internal' | 'video_call' | 'phone_call' | 'other';
+  priority: 'low' | 'medium' | 'high';
+  status: 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'postponed';
+  location?: string;
+  onlineMeetingUrl?: string;
+  phoneNumber?: string;
+  attendees?: string[]; // User IDs
+  relatedCaseId?: string;
+  relatedClientId?: string;
+  reminderMinutes?: number;
+  notes?: string;
+  attachments?: string[];
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  completedAt?: string;
+  tags?: string[];
+  estimatedDuration?: number; // in minutes
+  actualDuration?: number; // in minutes
+}
+
 export interface ActivityLog {
   id: string;
   user: string;
