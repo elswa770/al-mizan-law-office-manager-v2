@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Lawyer, Case, LawyerStatus, BarLevel, Hearing, HearingStatus, LawyerDocument } from '../types';
 import { 
   User, Phone, Mail, MapPin, Briefcase, Award, DollarSign, Calendar, 
   ArrowRight, FileText, CheckCircle, Clock, AlertCircle, Edit, Upload, 
   FileCheck, Download, Eye, Cloud 
 } from 'lucide-react';
-import { googleDriveService } from '../services/googleDriveService';
 
 interface LawyerDetailsProps {
   lawyerId: string;
@@ -31,19 +30,6 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
   
   if (!lawyer) return <div>Lawyer not found</div>;
-
-  // Initialize Google Drive Service
-  useEffect(() => {
-    const initGoogleDrive = async () => {
-      try {
-        await googleDriveService.initialize();
-        console.log('Google Drive initialized successfully for Lawyers');
-      } catch (error) {
-        console.error('Google Drive initialization failed for Lawyers:', error);
-      }
-    };
-    initGoogleDrive();
-  }, []);
 
   const assignedCases = cases.filter(c => c.assignedLawyerId === lawyer.id);
   const activeCasesCount = assignedCases.filter(c => c.status !== 'مغلقة').length;
@@ -143,58 +129,11 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
       if (newDocData.uploadToDrive) {
         setIsUploadingToDrive(true);
         
-        try {
-          // التحقق من تسجيل الدخول إلى Google
-          if (!googleDriveService.isSignedIn()) {
-            console.log('Not signed in to Google Drive for Lawyers, signing in...');
-            await googleDriveService.signIn();
-          }
-
-          // رفع الملف إلى Google Drive
-          console.log('File:', newDocData.file);
-          console.log('Folder:', `المحامين/${lawyer.name}`);
-          
-          const driveResponse = await googleDriveService.uploadFile(
-            newDocData.file, 
-            `المحامين/${lawyer.name}`
-          );
-          
-          console.log('Google Drive response:', driveResponse);
-
-          // تحديث بيانات المستند بمعلومات Google Drive
-          documentData.driveFileId = driveResponse.fileId;
-          documentData.driveLink = driveResponse.webViewLink;
-          documentData.driveContentLink = driveResponse.webContentLink;
-          documentData.uploadedToDrive = true;
-          documentData.documentUrl = driveResponse.webViewLink;
-          
-          setIsUploadingToDrive(false);
-          
-        } catch (error) {
-          console.error('Error uploading to Google Drive:', error);
-          setIsUploadingToDrive(false);
-          
-          // رسائل خطأ مفصلة
-          let errorMessage = 'حدث خطأ أثناء رفع الملف إلى Google Drive. يرجى المحاولة مرة أخرى.';
-          
-          if (error instanceof Error) {
-            console.error('Error message:', error.message);
-            console.error('Error stack:', error.stack);
-            
-            if (error.message.includes('sign-in')) {
-              errorMessage = 'فشل تسجيل الدخول إلى Google. يرجى المحاولة مرة أخرى.';
-            } else if (error.message.includes('upload')) {
-              errorMessage = 'فشل رفع الملف إلى Google Drive. يرجى التحقق من اتصال الإنترنت وحجم الملف.';
-            } else if (error.message.includes('permission')) {
-              errorMessage = 'لا توجد صلاحية كافية للوصول إلى Google Drive. يرجى التحقق من الأذونات.';
-            } else if (error.message.includes('quota')) {
-              errorMessage = 'مساحة Google Drive ممتلئة. يرجى مسح بعض الملفات والمحاولة مرة أخرى.';
-            }
-          }
-          
-          alert(errorMessage);
-          return;
-        }
+        // التحقق من تسجيل الدخول إلى Google
+        // TODO: إضافة خدمة Google Drive للمحامين
+        alert('سيتم إضافة رفع Google Drive للمحامين قريباً');
+        setIsUploadingToDrive(false);
+        return;
       }
 
       // إضافة المستند إلى قائمة المستندات

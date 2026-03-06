@@ -200,7 +200,8 @@ const Lawyers: React.FC<LawyersProps> = ({
                 </div>
                 <div className="flex items-center gap-2">
                   <DollarSign className="w-4 h-4 text-slate-400" />
-                  <span className="font-mono font-bold">{(lawyer.hourlyRate || 0).toLocaleString()} EGP/ساعة</span>
+                  <span className="font-mono font-bold">{(lawyer.hourlyRate || 0).toLocaleString()} EGP</span>
+                  <span className="text-xs text-slate-500">الراتب</span>
                 </div>
               </div>
             </div>

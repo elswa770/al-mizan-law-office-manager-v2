@@ -718,6 +718,12 @@ export interface LawyerDocument {
   uploadedBy: string;
   verified: boolean;
   notes?: string;
+  // Google Drive fields
+  driveFileId?: string;
+  driveLink?: string;
+  driveContentLink?: string;
+  uploadedToDrive?: boolean;
+  uploadToDrive?: boolean;
 }
 
 export interface LawyerPerformance {
