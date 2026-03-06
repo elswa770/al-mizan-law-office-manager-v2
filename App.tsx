@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, lazy, Suspense, useCallback } from 'react';
 import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
-import { Lawyer, LawyerStatus, LawyerSpecialization, LawyerRole } from './types';
+import { Lawyer, LawyerStatus, LawyerSpecialization, LawyerRole, BarLevel } from './types';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import Cases from './pages/Cases';
@@ -37,7 +37,7 @@ import {
   addActivity, getActivities, subscribeToActivities,
   getLegalReferences, addLegalReference, updateLegalReference, deleteLegalReference,
   getWorkLocations, addWorkLocation, updateWorkLocation, deleteWorkLocation,
-  getLawyers, addLawyer, updateLawyer, deleteLawyer
+  getLawyers, createLawyer, updateLawyer, deleteLawyer
 } from './services/dbService';
 import { auth, db } from './services/firebaseConfig';
 import { offlineManager } from './services/offlineManager';
@@ -559,19 +559,18 @@ function App() {
   // Lawyer management functions
   const handleAddLawyer = async (lawyer: Lawyer) => {
     try {
-      // Save to Firebase
       const lawyerData = {
-        name: lawyer.name,
-        email: lawyer.email,
-        phone: lawyer.phone,
+        name: lawyer.name || '',
+        email: lawyer.email || '',
+        phone: lawyer.phone || '',
         nationalId: lawyer.nationalId || '',
         barNumber: lawyer.barNumber || '',
         barRegistrationNumber: lawyer.barRegistrationNumber || '',
-        barLevel: lawyer.barLevel || '',
-        specialization: (lawyer.specialization || 'عام') as LawyerSpecialization,
-        role: (lawyer.role || 'محامي') as LawyerRole,
-        status: (lawyer.status || 'نشط') as LawyerStatus,
-        joinDate: lawyer.joinDate || '',
+        barLevel: lawyer.barLevel || BarLevel.GENERAL,
+        specialization: lawyer.specialization || LawyerSpecialization.CRIMINAL,
+        role: lawyer.role || LawyerRole.LAWYER,
+        status: lawyer.status || LawyerStatus.ACTIVE,
+        joinDate: lawyer.joinDate || new Date().toISOString().split('T')[0],
         officeLocation: lawyer.officeLocation || '',
         bio: lawyer.bio || '',
         education: lawyer.education || '',
@@ -582,38 +581,191 @@ function App() {
         hourlyRate: lawyer.hourlyRate || 0,
         profileImage: lawyer.profileImage || ''
       };
+
+      // Check if online and try to save to Firebase
+      const isOnline = await checkNetworkConnectivity();
       
-      const docId = await createLawyer(lawyerData);
-      const newLawyer = { ...lawyer, id: docId };
-      
-      // Update local state
-      setLawyers(prev => [...prev, newLawyer]);
+      if (isOnline) {
+        try {
+          const docId = await createLawyer(lawyerData);
+          
+          // إضافة المحامي الجديد إلى الحالة المحلية مع الـ ID الصحيح
+          setLawyers(prev => {
+            const updatedLawyers = [...prev, { 
+              ...lawyerData, 
+              id: docId,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }];
+            return updatedLawyers;
+          });
+          
+          // Cache the updated data
+          await offlineManager.cacheData('lawyers', [...lawyers, { ...lawyerData, id: docId }]);
+          
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving lawyer offline:', error);
+          
+          // Save to offline queue if Firebase fails
+          const tempId = `temp_lawyer_${Date.now()}`;
+          setLawyers(prev => {
+            const updatedLawyers = [...prev, { 
+              ...lawyerData, 
+              id: tempId,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            }];
+            return updatedLawyers;
+          });
+          
+          await offlineManager.addPendingAction({
+            type: 'create',
+            entity: 'lawyer',
+            data: { ...lawyerData, tempId }
+          });
+        }
+      } else {
+        // Offline mode - save locally and add to queue
+        console.log('📱 App.tsx - Offline mode, saving lawyer locally');
+        const tempId = `temp_lawyer_${Date.now()}`;
+        
+        // Update local state first
+        const newLawyer = { 
+          ...lawyerData, 
+          id: tempId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        const updatedLawyers = [...lawyers, newLawyer];
+        
+        console.log('📱 App.tsx - New lawyer to add:', newLawyer);
+        console.log('📱 App.tsx - Updated lawyers array:', updatedLawyers);
+        
+        setLawyers([...updatedLawyers]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        await offlineManager.addPendingAction({
+          type: 'create',
+          entity: 'lawyer',
+          data: { ...lawyerData, tempId }
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('lawyers', updatedLawyers);
+        console.log('� App.tsx - Lawyer added and cached successfully');
+      }
     } catch (error) {
-      console.error('Error adding lawyer to Firebase:', error);
+      console.error('Error adding lawyer:', error);
     }
   };
 
   const handleUpdateLawyer = async (lawyer: Lawyer) => {
     try {
-      // Update in Firebase
-      await updateLawyer(lawyer.id, lawyer);
+      // Check if online and try to update in Firebase
+      const isOnline = await checkNetworkConnectivity();
       
-      // Update local state
-      setLawyers(prev => prev.map(l => l.id === lawyer.id ? lawyer : l));
+      if (isOnline) {
+        try {
+          // Online: Update in Firebase
+          await updateLawyer(lawyer.id, lawyer);
+          
+          // Update local state
+          setLawyers(prev => prev.map(l => l.id === lawyer.id ? lawyer : l));
+          
+          // Cache the updated data
+          await offlineManager.cacheData('lawyers', lawyers.map(l => l.id === lawyer.id ? lawyer : l));
+          
+          console.log('✅ Lawyer updated online');
+        } catch (error) {
+          console.error('❌ App.tsx - Firebase error, saving lawyer update offline:', error);
+          
+          // Update local state immediately
+          setLawyers(prev => prev.map(l => l.id === lawyer.id ? lawyer : l));
+          
+          // Add to pending actions
+          await offlineManager.addPendingAction({
+            type: 'update',
+            entity: 'lawyer',
+            data: lawyer
+          });
+          
+          // Cache locally with updated data
+          await offlineManager.cacheData('lawyers', lawyers.map(l => l.id === lawyer.id ? lawyer : l));
+          console.log('📴 Lawyer update added to pending actions (fallback)');
+        }
+      } else {
+        // Offline mode - update locally and add to queue
+        console.log('📱 App.tsx - Offline mode, updating lawyer locally');
+        
+        // Update local state first
+        const updatedLawyers = lawyers.map(l => l.id === lawyer.id ? lawyer : l);
+        
+        console.log('📱 App.tsx - Updated lawyers array:', updatedLawyers);
+        
+        setLawyers([...updatedLawyers]);
+        
+        // Force re-render of components
+        setForceUpdate(prev => prev + 1);
+        setRefreshKey(prev => prev + 1); // Additional force re-render
+        
+        await offlineManager.addPendingAction({
+          type: 'update',
+          entity: 'lawyer',
+          data: lawyer
+        });
+        
+        // Cache locally with updated data
+        await offlineManager.cacheData('lawyers', updatedLawyers);
+        console.log('� App.tsx - Lawyer updated and cached successfully');
+      }
     } catch (error) {
-      console.error('Error updating lawyer in Firebase:', error);
+      console.error('Error updating lawyer:', error);
     }
   };
 
   const handleDeleteLawyer = async (lawyerId: string) => {
     try {
-      // Delete from Firebase
-      await deleteLawyer(lawyerId);
-      
-      // Update local state
-      setLawyers(prev => prev.filter(l => l.id !== lawyerId));
+      if (navigator.onLine) {
+        try {
+          // Online: Delete from Firebase
+          await deleteLawyer(lawyerId);
+          
+          // Update local state
+          setLawyers(prev => prev.filter(l => l.id !== lawyerId));
+          console.log('✅ Lawyer deleted online');
+        } catch (error) {
+          console.log('📱 Connection failed, switching to offline mode for delete');
+          
+          // Offline: Add to pending actions
+          // Update local state immediately
+          setLawyers(prev => prev.filter(l => l.id !== lawyerId));
+          
+          // Add to pending actions
+          await offlineManager.addPendingAction({
+            type: 'delete',
+            entity: 'lawyer',
+            data: { id: lawyerId }
+          });
+          console.log('📴 Lawyer deletion added to pending actions (fallback)');
+        }
+      } else {
+        // Offline: Add to pending actions
+        // Update local state immediately
+        setLawyers(prev => prev.filter(l => l.id !== lawyerId));
+        
+        // Add to pending actions
+        await offlineManager.addPendingAction({
+          type: 'delete',
+          entity: 'lawyer',
+          data: { id: lawyerId }
+        });
+        console.log('📴 Lawyer deletion added to pending actions');
+      }
     } catch (error) {
-      console.error('Error deleting lawyer from Firebase:', error);
+      console.error('Error deleting lawyer:', error);
     }
   };
 

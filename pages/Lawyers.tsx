@@ -26,12 +26,13 @@ const Lawyers: React.FC<LawyersProps> = ({
     name: '',
     phone: '',
     email: '',
+    nationalId: '',
     barNumber: '',
     barRegistrationNumber: '',
-    barLevel: '',
-    specialization: '',
-    role: '',
-    status: 'active',
+    barLevel: BarLevel.GENERAL,
+    specialization: LawyerSpecialization.CRIMINAL,
+    role: LawyerRole.LAWYER,
+    status: LawyerStatus.ACTIVE,
     joinDate: new Date().toISOString().split('T')[0],
     officeLocation: '',
     bio: '',
@@ -67,9 +68,12 @@ const Lawyers: React.FC<LawyersProps> = ({
     setIsModalOpen(false);
     setEditingLawyer(null);
     setFormData({
-      name: '', phone: '', whatsapp: '', email: '', governorate: '', office: '',
-      barLevel: 'general', salary: 0, specialization: '', joinDate: new Date().toISOString().split('T')[0],
-      status: 'active', notes: ''
+      name: '', phone: '', email: '', nationalId: '',
+      barNumber: '', barRegistrationNumber: '', barLevel: BarLevel.GENERAL, 
+      specialization: LawyerSpecialization.CRIMINAL, role: LawyerRole.LAWYER,
+      status: LawyerStatus.ACTIVE, joinDate: new Date().toISOString().split('T')[0],
+      officeLocation: '', bio: '', education: '', experience: 0,
+      hourlyRate: 0, languages: [], casesHandled: 0, successRate: 0, profileImage: ''
     });
   };
 
@@ -244,6 +248,16 @@ const Lawyers: React.FC<LawyersProps> = ({
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الرقم القومي</label>
+                  <input 
+                    required
+                    type="text" 
+                    className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                    value={formData.nationalId}
+                    onChange={e => setFormData({...formData, nationalId: e.target.value})}
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">رقم الهاتف</label>
                   <input 
                     required
@@ -251,15 +265,6 @@ const Lawyers: React.FC<LawyersProps> = ({
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     value={formData.phone}
                     onChange={e => setFormData({...formData, phone: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">رقم الواتساب</label>
-                  <input 
-                    type="tel" 
-                    className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                    value={formData.whatsapp}
-                    onChange={e => setFormData({...formData, whatsapp: e.target.value})}
                   />
                 </div>
                 <div>

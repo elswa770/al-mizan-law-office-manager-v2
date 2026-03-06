@@ -6,7 +6,7 @@ import { Case, Client, Hearing, Task, ActivityLog } from '../types';
 export interface OfflineAction {
   id: string;
   type: 'create' | 'update' | 'delete';
-  entity: 'case' | 'client' | 'hearing' | 'task' | 'appointment';
+  entity: 'case' | 'client' | 'hearing' | 'task' | 'appointment' | 'lawyerDocument' | 'lawyer';
   data: any;
   timestamp: string;
   retryCount: number;
@@ -344,6 +344,12 @@ class OfflineManager {
       case 'task':
         await this.executeTaskAction(type, data);
         break;
+      case 'lawyer':
+        await this.executeLawyerAction(type, data);
+        break;
+      case 'lawyerDocument':
+        await this.executeLawyerDocumentAction(type, data);
+        break;
       default:
         throw new Error(`Unknown entity type: ${entity}`);
     }
@@ -588,6 +594,75 @@ class OfflineManager {
         break;
       default:
         throw new Error(`Unknown task action type: ${type}`);
+    }
+  }
+
+  // Execute lawyer actions
+  private async executeLawyerAction(type: string, data: any): Promise<void> {
+    // Import dbService functions dynamically to avoid circular dependencies
+    const { createLawyer, updateLawyer, deleteLawyer } = await import('./dbService');
+    
+    console.log(`Executing lawyer ${type}:`, data);
+    
+    switch (type) {
+      case 'create':
+        const lawyerId = await createLawyer(data);
+        
+        // Update tempIdMap if this was a temp ID
+        const tempId = data.tempId;
+        if (tempId && tempId.startsWith('temp_lawyer_')) {
+          this.tempIdMap.set(tempId, lawyerId);
+          console.log(`📍 Stored lawyer ID mapping: ${tempId} -> ${lawyerId}`);
+          console.log(`📍 Current tempIdMap size: ${this.tempIdMap.size}`);
+        }
+        break;
+      case 'update':
+        if (!data.id) {
+          throw new Error('Lawyer ID is required for update');
+        }
+        // Get real ID if this is a temp ID
+        const realLawyerId = this.getRealId(data.id);
+        console.log(`🔄 Updating lawyer with ID: ${data.id} (real: ${realLawyerId})`);
+        
+        // Update in Firestore using real ID
+        await updateLawyer(realLawyerId, data);
+        break;
+      case 'delete':
+        if (!data.id) {
+          throw new Error('Lawyer ID is required for delete');
+        }
+        // Get real ID if this is a temp ID
+        const realDeleteLawyerId = this.getRealId(data.id);
+        console.log(`🗑️ Deleting lawyer with ID: ${data.id} (real: ${realDeleteLawyerId})`);
+        
+        // Delete from Firestore using real ID
+        await deleteLawyer(realDeleteLawyerId);
+        break;
+      default:
+        throw new Error(`Unknown lawyer action type: ${type}`);
+    }
+  }
+
+  // Execute lawyer document actions
+  private async executeLawyerDocumentAction(type: string, data: any): Promise<void> {
+    console.log(`Executing lawyer document ${type}:`, data);
+    
+    // For lawyer documents, we need to handle the special data structure
+    if (type === 'create' && data.lawyerId && data.document) {
+      // This is a lawyer document creation
+      // We need to update the lawyer's documents array
+      const { updateLawyer } = await import('./dbService');
+      
+      // Get the current lawyer data
+      const realLawyerId = this.getRealId(data.lawyerId);
+      console.log(`🔄 Adding document to lawyer with ID: ${data.lawyerId} (real: ${realLawyerId})`);
+      
+      // Update lawyer with new document
+      await updateLawyer(realLawyerId, {
+        documents: [data.document]
+      });
+    } else {
+      throw new Error(`Invalid lawyer document action data: ${JSON.stringify(data)}`);
     }
   }
 

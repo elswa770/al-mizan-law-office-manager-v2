@@ -3,9 +3,11 @@ import { Lawyer, Case, LawyerStatus, BarLevel, Hearing, HearingStatus, LawyerDoc
 import { 
   User, Phone, Mail, MapPin, Briefcase, Award, DollarSign, Calendar, 
   ArrowRight, FileText, CheckCircle, Clock, AlertCircle, Edit, Upload, 
-  FileCheck, Download, Eye, Cloud 
+  FileCheck, Download, Eye, Cloud, Wifi, WifiOff 
 } from 'lucide-react';
 import { googleDriveService } from '../services/googleDriveService';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import { offlineManager } from '../services/offlineManager';
 
 interface LawyerDetailsProps {
   lawyerId: string;
@@ -31,6 +33,11 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
   
   if (!lawyer) return <div>Lawyer not found</div>;
+
+  // --- Offline Status ---
+  const offlineStatus = useOfflineStatus();
+  const isOnline = offlineStatus?.online ?? true;
+  const pendingCount = offlineStatus?.pendingActions ?? 0;
 
   // Initialize Google Drive Service
   useEffect(() => {
@@ -199,10 +206,26 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
 
       // إضافة المستند إلى قائمة المستندات
       const updatedDocuments = [...(lawyer.documents || []), documentData as LawyerDocument];
-      onUpdateLawyer({
-        ...lawyer,
-        documents: updatedDocuments
-      });
+      
+      if (isOnline) {
+        onUpdateLawyer({
+          ...lawyer,
+          documents: updatedDocuments
+        });
+        console.log('✅ Document saved online');
+      } else {
+        // Offline: Add to pending actions
+        console.log('📴 Offline: Adding document to pending actions');
+        await offlineManager.addPendingAction({
+          type: 'create',
+          entity: 'lawyerDocument',
+          data: {
+            lawyerId: lawyer.id,
+            document: documentData as LawyerDocument
+          }
+        });
+        console.log('✅ Document added to pending actions');
+      }
 
       // إغلاق النافذة وإعادة تعيين البيانات
       setIsDocModalOpen(false);
