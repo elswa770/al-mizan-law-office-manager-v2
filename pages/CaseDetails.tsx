@@ -1,8 +1,10 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Case, Client, Hearing, CaseStatus, CaseDocument, FinancialTransaction, PaymentMethod, Lawyer } from '../types';
-import { ArrowRight, Edit3, Calendar, FileText, Briefcase, MapPin, User, Shield, Save, X, Activity, DollarSign, Clock, CheckCircle, AlertCircle, Phone, Gavel, MoreVertical, Plus, Upload, FileCheck, Eye, Trash2, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft, Calculator, Edit, Users, Cloud, Download } from 'lucide-react';
+import { Case, Client, Hearing, CaseStatus, CaseDocument, FinancialTransaction, PaymentMethod, Lawyer, CaseProgress, CaseMilestone, CaseAchievement, CaseNote, CaseProcedure } from '../types';
+import { ArrowRight, Edit3, Calendar, FileText, Briefcase, MapPin, User, Shield, Save, X, Activity, DollarSign, Clock, CheckCircle, AlertCircle, Phone, Gavel, MoreVertical, Plus, Upload, FileCheck, Eye, Trash2, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft, Calculator, Edit, Users, Cloud, Download, ArrowLeftCircle, Wifi, WifiOff, RefreshCw, Target } from 'lucide-react';
 import { googleDriveService } from '../services/googleDriveService';
+import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import { offlineManager } from '../services/offlineManager';
+import CaseProgressTracker from '../components/CaseProgressTracker';
 
 interface CaseDetailsProps {
   caseId: string;
@@ -20,8 +22,13 @@ interface CaseDetailsProps {
 }
 
 const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawyers, hearings, onBack, onAddHearing, onUpdateCase, onUpdateHearing, onDeleteHearing, onClientClick, readOnly = false }) => {
+  // --- Offline Status ---
+  const offlineStatus = useOfflineStatus();
+  const isOnline = offlineStatus?.online ?? true;
+  const pendingCount = offlineStatus?.pendingActions ?? 0;
+
   const currentCase = useMemo(() => cases.find(c => c.id === caseId), [cases, caseId]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'hearings' | 'documents' | 'finance'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'progress' | 'hearings' | 'documents' | 'finance'>('overview');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [isHearingModalOpen, setIsHearingModalOpen] = useState(false);
@@ -58,6 +65,29 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
     rulingUrl: '',
     expenses: { amount: 0, paidBy: 'lawyer' as 'lawyer' | 'client', description: '' }
   });
+
+  // Wizard State for Advanced Hearing Editing
+  const [editingHearing, setEditingHearing] = useState<Hearing | null>(null);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [decisionData, setDecisionData] = useState({
+    decision: '',
+    status: 'محددة' as any,
+    rulingUrl: '',
+    rulingFileName: '',
+    completed: false
+  });
+  const [nextSessionData, setNextSessionData] = useState({
+    createNext: false,
+    date: '',
+    requirements: '',
+    clientRequirements: ''
+  });
+  const [expensesData, setExpensesData] = useState({
+    amount: 0,
+    description: '',
+    paidBy: 'lawyer' as 'lawyer' | 'client'
+  });
+  const rulingFileRef = useRef<HTMLInputElement>(null);
 
   // Finance State
   const [isTransModalOpen, setIsTransModalOpen] = useState(false);
@@ -177,6 +207,214 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
        } as Case);
        setIsEditModalOpen(false);
     }
+  };
+
+  // Handler for opening hearing modal (add or edit)
+  const handleOpenHearingModal = (hearing?: Hearing) => {
+    if (hearing) {
+      setEditingHearing(hearing);
+      setWizardStep(1);
+      // Populate form
+      setDecisionData({
+        decision: hearing.decision || '',
+        status: hearing.status || 'محددة',
+        rulingUrl: hearing.rulingUrl || '',
+        rulingFileName: hearing.rulingUrl ? 'تم إرفاق ملف سابقاً' : '',
+        completed: hearing.isCompleted || false
+      });
+      setExpensesData({
+        amount: hearing.expenses?.amount || 0,
+        description: hearing.expenses?.description || '',
+        paidBy: hearing.expenses?.paidBy || 'lawyer'
+      });
+      setNextSessionData({
+        createNext: false,
+        date: '',
+        requirements: '',
+        clientRequirements: ''
+      });
+      // Also set the basic data for compatibility
+      setNewHearingData({
+        date: hearing.date,
+        time: hearing.time || '',
+        requirements: hearing.requirements || '',
+        type: hearing.type,
+        status: hearing.status,
+        decision: hearing.decision || '',
+        rulingUrl: hearing.rulingUrl || '',
+        expenses: hearing.expenses || { amount: 0, paidBy: 'lawyer' as 'lawyer' | 'client', description: '' }
+      });
+    } else {
+      setEditingHearing(null);
+      setWizardStep(1);
+      // Reset wizard data
+      setDecisionData({
+        decision: '',
+        status: 'محددة' as any,
+        rulingUrl: '',
+        rulingFileName: '',
+        completed: false
+      });
+      setExpensesData({
+        amount: 0,
+        description: '',
+        paidBy: 'lawyer' as 'lawyer' | 'client'
+      });
+      setNextSessionData({
+        createNext: false,
+        date: '',
+        requirements: '',
+        clientRequirements: ''
+      });
+      // Reset basic data
+      setNewHearingData({ 
+        date: '', 
+        time: '', 
+        requirements: '', 
+        type: 'session',
+        status: 'محددة' as any,
+        decision: '',
+        rulingUrl: '',
+        expenses: { amount: 0, paidBy: 'lawyer' as 'lawyer' | 'client', description: '' }
+      });
+    }
+    
+    setIsHearingModalOpen(true);
+  };
+
+  // File select handler for wizard
+  const handleWizardFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const url = URL.createObjectURL(file);
+      setDecisionData(prev => ({
+        ...prev,
+        rulingUrl: url,
+        rulingFileName: file.name
+      }));
+    }
+  };
+
+  // Wizard complete handler
+  const handleWizardComplete = async () => {
+    if (editingHearing && onUpdateHearing) {
+      // Update Current Hearing
+      const updatedHearing = {
+        ...editingHearing,
+        decision: decisionData.decision,
+        status: decisionData.status,
+        rulingUrl: decisionData.rulingUrl,
+        isCompleted: decisionData.completed,
+        expenses: expensesData.amount > 0 ? {
+           amount: expensesData.amount,
+           description: expensesData.description,
+           paidBy: expensesData.paidBy
+        } : undefined
+      };
+
+      // Handle online/offline logic
+      if (isOnline) {
+        // Online: Update immediately
+        onUpdateHearing(updatedHearing);
+        console.log('✅ Hearing updated online');
+      } else {
+        // Offline: Add to pending actions
+        await offlineManager.addPendingAction({
+          type: 'update',
+          entity: 'hearing',
+          data: updatedHearing
+        });
+        // Update local state immediately for better UX
+        onUpdateHearing(updatedHearing);
+        console.log('📱 Hearing updated offline');
+      }
+
+      // Create Next Hearing (if selected)
+      if (nextSessionData.createNext && nextSessionData.date && onAddHearing) {
+         const newHearing = {
+            id: Math.random().toString(36).substring(2, 9),
+            caseId: editingHearing.caseId,
+            date: nextSessionData.date,
+            time: '09:00', // Default
+            type: 'session' as const,
+            status: 'محددة' as any,
+            requirements: nextSessionData.requirements,
+            clientRequirements: nextSessionData.clientRequirements
+         };
+         
+         if (isOnline) {
+           onAddHearing(newHearing);
+           console.log('✅ Next hearing created online');
+         } else {
+           await offlineManager.addPendingAction({
+             type: 'create',
+             entity: 'hearing',
+             data: newHearing
+           });
+           // Update local state immediately
+           onAddHearing(newHearing);
+           console.log('📱 Next hearing created offline');
+         }
+      }
+
+      setEditingHearing(null);
+      setIsHearingModalOpen(false);
+    }
+  };
+
+  // Handler for saving hearing (add or edit) - Simple version for new hearings
+  const handleSaveHearing = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newHearingData.date) return;
+
+    const hearingData = {
+      id: editingHearing?.id || Math.random().toString(36).substring(2, 9),
+      caseId: caseId,
+      date: newHearingData.date,
+      time: newHearingData.time,
+      requirements: newHearingData.requirements,
+      type: newHearingData.type as any,
+      status: newHearingData.status,
+      decision: newHearingData.decision,
+      rulingUrl: newHearingData.rulingUrl,
+      expenses: newHearingData.expenses
+    };
+
+    if (editingHearing) {
+      // For existing hearings, use wizard instead
+      handleOpenHearingModal(editingHearing);
+      return;
+    } else {
+      // Add new hearing
+      if (onAddHearing) {
+        // Handle online/offline logic
+        if (isOnline) {
+          onAddHearing(hearingData);
+          console.log('✅ New hearing created online');
+        } else {
+          await offlineManager.addPendingAction({
+            type: 'create',
+            entity: 'hearing',
+            data: hearingData
+          });
+          // Update local state immediately for better UX
+          onAddHearing(hearingData);
+          console.log('📱 New hearing created offline');
+        }
+      }
+    }
+
+    setIsHearingModalOpen(false);
+    setNewHearingData({ 
+      date: '', 
+      time: '', 
+      requirements: '', 
+      type: 'session',
+      status: 'محددة' as any,
+      decision: '',
+      rulingUrl: '',
+      expenses: { amount: 0, paidBy: 'lawyer' as 'lawyer' | 'client', description: '' }
+    });
   };
 
   // Document Handlers
@@ -332,6 +570,108 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
       default: return 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-700 dark:text-gray-300';
     }
   };
+
+  // Progress tracking handlers
+  const handleUpdateProgress = (progress: CaseProgress) => {
+    console.log('handleUpdateProgress called with:', progress);
+    console.log('currentCase before update:', currentCase);
+    
+    if (onUpdateCase) {
+      const updatedCase = {
+        ...currentCase,
+        progress: progress
+      };
+      console.log('updatedCase:', updatedCase);
+      
+      // Call parent update function
+      onUpdateCase(updatedCase);
+    } else {
+      console.log('onUpdateCase is not defined');
+    }
+  };
+
+  const handleUpdateMilestone = (milestone: CaseMilestone) => {
+    const currentProgress = currentCase.progress || {
+      id: Math.random().toString(36).substring(2, 9),
+      caseId: currentCase.id,
+      currentStage: 'initial',
+      milestones: [],
+      achievements: [],
+      nextSteps: [],  // Ensure nextSteps exists
+      risks: [],
+      opportunities: [],
+      lastUpdated: new Date().toISOString(),
+      updatedBy: 'المحامي'
+    };
+
+    const existingMilestoneIndex = currentProgress.milestones.findIndex(m => m.id === milestone.id);
+    if (existingMilestoneIndex >= 0) {
+      currentProgress.milestones[existingMilestoneIndex] = milestone;
+    } else {
+      currentProgress.milestones.push(milestone);
+    }
+
+    currentProgress.lastUpdated = new Date().toISOString();
+
+    console.log('CaseDetails.tsx - Updating milestone:', milestone);
+    console.log('CaseDetails.tsx - Updated progress with milestones:', currentProgress.milestones);
+    console.log('CaseDetails.tsx - Current progress object:', currentProgress);
+
+    handleUpdateProgress(currentProgress);
+  };
+
+  const handleAddAchievement = (achievement: CaseAchievement) => {
+    const currentProgress = currentCase.progress || {
+      id: Math.random().toString(36).substring(2, 9),
+      caseId: currentCase.id,
+      currentStage: 'initial',
+      milestones: [],
+      achievements: [],
+      nextSteps: [],
+      risks: [],
+      opportunities: [],
+      lastUpdated: new Date().toISOString(),
+      updatedBy: 'المحامي'
+    };
+
+    currentProgress.achievements.push(achievement);
+    currentProgress.lastUpdated = new Date().toISOString();
+
+    handleUpdateProgress(currentProgress);
+  };
+
+  const handleAddNote = (note: CaseNote) => {
+    const currentNotes = currentCase.caseNotes || [];
+    if (onUpdateCase) {
+      onUpdateCase({
+        ...currentCase,
+        caseNotes: [...currentNotes, note]
+      });
+    }
+  };
+
+  const handleAddProcedure = (procedure: CaseProcedure) => {
+    const currentProcedures = currentCase.procedures || [];
+    if (onUpdateCase) {
+      onUpdateCase({
+        ...currentCase,
+        procedures: [...currentProcedures, procedure]
+      });
+    }
+  };
+
+  const renderProgressTab = () => (
+    <CaseProgressTracker
+      caseData={currentCase}
+      hearings={caseHearings}
+      onUpdateProgress={handleUpdateProgress}
+      onUpdateMilestone={handleUpdateMilestone}
+      onAddAchievement={handleAddAchievement}
+      onAddNote={handleAddNote}
+      onAddProcedure={handleAddProcedure}
+      readOnly={readOnly}
+    />
+  );
 
   const getFileIcon = (type: string) => {
     if (type.includes('pdf')) return <FileText className="w-8 h-8 text-red-500" />;
@@ -558,6 +898,34 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${isUpcoming ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300' : 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400'}`}>
                                 {h.status}
                              </span>
+                             {!readOnly && (
+                               <div className="flex gap-1 ml-auto">
+                                 <button 
+                                   onClick={() => {
+                                     console.log('Edit button clicked for hearing:', h);
+                                     handleOpenHearingModal(h);
+                                   }} 
+                                   className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-all border border-transparent hover:border-indigo-200 dark:hover:border-indigo-700"
+                                   title="تعديل الجلسة"
+                                 >
+                                   <Edit3 className="w-4 h-4" />
+                                 </button>
+                                 {onDeleteHearing && (
+                                   <button 
+                                     onClick={() => {
+                                       console.log('Delete button clicked for hearing:', h.id);
+                                       if (confirm('هل تريد حذف هذه الجلسة؟')) {
+                                         onDeleteHearing(h.id);
+                                       }
+                                     }} 
+                                     className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-all border border-transparent hover:border-red-200 dark:hover:border-red-700"
+                                     title="حذف الجلسة"
+                                   >
+                                     <Trash2 className="w-4 h-4" />
+                                   </button>
+                                 )}
+                               </div>
+                             )}
                           </div>
                           <p className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">{h.decision || h.requirements || 'لا توجد تفاصيل'}</p>
                           {h.expenses && h.expenses.amount > 0 && (
@@ -848,6 +1216,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
        <div className="flex p-1 bg-slate-200/50 dark:bg-slate-800/50 rounded-xl overflow-x-auto">
           {[
              { id: 'overview', label: 'نظرة عامة', icon: Activity },
+             { id: 'progress', label: 'سير القضية', icon: Target },
              { id: 'hearings', label: 'سجل الجلسات', icon: Gavel },
              { id: 'documents', label: 'المستندات', icon: FileText },
              { id: 'finance', label: 'المالية', icon: DollarSign },
@@ -866,6 +1235,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
        {/* Tab Content */}
        <div className="min-h-[400px]">
           {activeTab === 'overview' && renderOverview()}
+          {activeTab === 'progress' && renderProgressTab()}
           {activeTab === 'hearings' && renderHearingsTimeline()}
           {activeTab === 'documents' && renderDocumentsTab()}
           {activeTab === 'finance' && renderFinanceTab()}
@@ -893,6 +1263,26 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                         <div>
                            <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">الدائرة</label>
                            <input type="text" value={editCaseData.circle || ''} onChange={e => setEditCaseData({...editCaseData, circle: e.target.value})} className="w-full border p-2.5 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">تاريخ فتح القضية</label>
+                           <input 
+                             type="date" 
+                             value={editCaseData.caseOpeningDate || ''} 
+                             onChange={e => setEditCaseData({...editCaseData, caseOpeningDate: e.target.value})} 
+                             className="w-full border p-2.5 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" 
+                           />
+                        </div>
+                        <div>
+                           <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-1">تاريخ رفع الدعوى</label>
+                           <input 
+                             type="date" 
+                             value={editCaseData.filingDate || ''} 
+                             onChange={e => setEditCaseData({...editCaseData, filingDate: e.target.value})} 
+                             className="w-full border p-2.5 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none" 
+                           />
                         </div>
                     </div>
                     <div>
@@ -1148,23 +1538,318 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
 
        {/* Add Hearing Modal */}
        {isHearingModalOpen && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md animate-in zoom-in-95 duration-200">
-                <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between">
-                  <h3 className="font-bold text-slate-900 dark:text-white">إضافة جلسة جديدة</h3>
-                  <button onClick={() => setIsHearingModalOpen(false)}><X className="w-5 h-5 text-slate-400 hover:text-red-500" /></button>
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+            {/* Offline Status Indicator */}
+            {!isOnline && (
+              <div className="absolute top-4 left-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3 flex items-center gap-2 z-10">
+                <WifiOff className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-200">وضع عدم الاتصال</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">سيتم حفظ التغييرات ومزامنتها عند الاتصال</p>
                 </div>
-                <form onSubmit={handleSaveNewHearing} className="p-4 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={async () => {
+                    const success = await offlineManager.forceSyncNow();
+                    if (success) {
+                      console.log('✅ Manual sync and refresh completed');
+                    } else {
+                      console.log('❌ Manual sync failed');
+                    }
+                  }}
+                  className="px-3 py-1 bg-amber-600 text-white text-xs rounded hover:bg-amber-700 transition-colors flex items-center gap-1"
+                  title="مزامنة الآن"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  مزامنة
+                </button>
+                <button
+                  onClick={async () => {
+                    await offlineManager.refreshFromFirebase();
+                  }}
+                  className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors flex items-center gap-1"
+                  title="تحديث من Firebase"
+                >
+                  <Download className="w-3 h-3" />
+                  تحديث
+                </button>
+              </div>
+            )}
+            {editingHearing ? (
+               // Wizard Modal for Editing
+               <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+                  {/* Modal Header */}
+                  <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-800 sticky top-0 z-10">
                      <div>
-                        <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">التاريخ</label>
-                        <input type="date" required className="w-full border dark:border-slate-600 p-2 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white" value={newHearingData.date} onChange={e => setNewHearingData({...newHearingData, date: e.target.value})} />
+                        <h3 className="font-bold text-slate-900 dark:text-white text-lg">إدارة الجلسة</h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                           {currentCase.title} - {editingHearing.date}
+                        </p>
                      </div>
-                     <div>
-                        <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">الوقت</label>
-                        <input type="time" className="w-full border dark:border-slate-600 p-2 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white" value={newHearingData.time} onChange={e => setNewHearingData({...newHearingData, time: e.target.value})} />
-                     </div>
+                     <button onClick={() => {
+                       setEditingHearing(null);
+                       setIsHearingModalOpen(false);
+                     }} className="text-slate-400 hover:text-red-500"><X className="w-6 h-6" /></button>
                   </div>
+
+                  {/* Wizard Steps Indicator */}
+                  <div className="flex items-center justify-between px-8 py-4 bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700">
+                     {[
+                        { id: 1, label: 'القرار والحالة', icon: Gavel },
+                        { id: 2, label: 'ما بعد الجلسة', icon: Calendar },
+                        { id: 3, label: 'المصروفات', icon: DollarSign },
+                     ].map((step) => (
+                        <div key={step.id} className={`flex flex-col items-center gap-2 cursor-pointer ${wizardStep === step.id ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400'}`} onClick={() => setWizardStep(step.id as any)}>
+                           <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all ${wizardStep === step.id ? 'border-indigo-600 bg-indigo-50 dark:bg-indigo-900/20' : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700'}`}>
+                              <step.icon className="w-5 h-5" />
+                           </div>
+                           <span className="text-xs font-bold">{step.label}</span>
+                        </div>
+                     ))}
+                  </div>
+
+                  <div className="p-6 min-h-[300px]">
+                     {/* Step 1: Decision */}
+                     {wizardStep === 1 && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                           <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">قرار الجلسة</label>
+                              <textarea 
+                                 rows={4} 
+                                 className="w-full border dark:border-slate-600 p-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none bg-white dark:bg-slate-700 text-slate-900 dark:text-white" 
+                                 placeholder="ماذا حدث في الجلسة؟ مثال: تم التأجيل للإعلان..."
+                                 value={decisionData.decision}
+                                 onChange={e => setDecisionData({...decisionData, decision: e.target.value})}
+                                 disabled={readOnly}
+                              />
+                           </div>
+                           <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">حالة الجلسة الحالية</label>
+                                 <select 
+                                    className="w-full border dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                                    value={decisionData.status}
+                                    onChange={e => setDecisionData({...decisionData, status: e.target.value})}
+                                    disabled={readOnly}
+                                 >
+                                    <option value="محددة">محددة</option>
+                                    <option value="منعقدة">منعقدة</option>
+                                    <option value="مؤجلة">مؤجلة</option>
+                                    <option value="ملغية">ملغية</option>
+                                    <option value="حجز للحكم">حجز للحكم</option>
+                                 </select>
+                              </div>
+                              <div className="flex items-center pt-6">
+                                 <label className="flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                       type="checkbox" 
+                                       checked={decisionData.completed} 
+                                       onChange={e => setDecisionData({...decisionData, completed: e.target.checked})}
+                                       className="w-5 h-5 text-indigo-600 rounded" 
+                                       disabled={readOnly}
+                                    />
+                                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">تم تنفيذ جميع المتطلبات</span>
+                                 </label>
+                              </div>
+                           </div>
+                           
+                           {/* File Upload for Ruling */}
+                           <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">صورة المحضر / الحكم (ملف)</label>
+                              <input 
+                                 type="file" 
+                                 ref={rulingFileRef}
+                                 className="hidden" 
+                                 onChange={handleWizardFileSelect}
+                              />
+                              <div 
+                                 onClick={() => !readOnly && rulingFileRef.current?.click()}
+                                 className={`border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-6 text-center ${readOnly ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-indigo-400'} transition-colors flex flex-col items-center gap-2`}
+                              >
+                                 {decisionData.rulingUrl ? (
+                                    <div className="flex items-center gap-3 text-green-700 bg-green-50 dark:bg-green-900/20 dark:text-green-400 px-4 py-2 rounded-lg">
+                                       <CheckCircle className="w-5 h-5" />
+                                       <span className="font-bold text-sm">تم إرفاق الملف: {decisionData.rulingFileName || 'ملف الحكم'}</span>
+                                       {!readOnly && (
+                                       <button 
+                                          onClick={(e) => { 
+                                             e.stopPropagation(); 
+                                             setDecisionData({...decisionData, rulingUrl: '', rulingFileName: ''}); 
+                                          }}
+                                          className="text-red-500 hover:bg-red-100 rounded-full p-1 ml-2"
+                                          title="حذف الملف"
+                                       >
+                                          <X className="w-4 h-4" />
+                                       </button>
+                                    )}
+                                    </div>
+                                 ) : (
+                                    <>
+                                       <Upload className="w-8 h-8 text-slate-400" />
+                                       <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">اضغط لرفع ملف (صورة أو PDF)</p>
+                                    </>
+                                 )}
+                              </div>
+                           </div>
+                        </div>
+                     )}
+
+                     {/* Step 2: Next Session */}
+                     {wizardStep === 2 && (
+                        <div className="space-y-5 animate-in fade-in slide-in-from-right-4">
+                           <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800 flex items-center justify-between">
+                              <div className="flex items-center gap-2 text-sm">
+                                 <span className="text-slate-500 dark:text-slate-400">المحامي المسؤول</span>
+                                 <span className="font-medium text-slate-800 dark:text-white">{currentCase.assignedLawyerName || 'غير معين'}</span>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                 <input type="checkbox" className="sr-only peer" checked={nextSessionData.createNext} onChange={e => setNextSessionData({...nextSessionData, createNext: e.target.checked})} disabled={readOnly} />
+                                 <div className="w-11 h-6 bg-slate-300 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 disabled:opacity-50"></div>
+                              </label>
+                           </div>
+
+                           {nextSessionData.createNext && (
+                              <div className="space-y-4 border-r-2 border-blue-200 dark:border-blue-800 pr-4 mr-2">
+                                 <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تاريخ الجلسة القادمة</label>
+                                    <input 
+                                       type="date" 
+                                       className="w-full border dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                                       value={nextSessionData.date}
+                                       onChange={e => setNextSessionData({...nextSessionData, date: e.target.value})}
+                                       disabled={readOnly}
+                                    />
+                                 </div>
+                                 <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">المطلوب من المحامي (للجلسة القادمة)</label>
+                                    <input 
+                                       type="text" 
+                                       className="w-full border dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white" 
+                                       placeholder="مثال: تقديم المذكرات"
+                                       value={nextSessionData.requirements}
+                                       onChange={e => setNextSessionData({...nextSessionData, requirements: e.target.value})}
+                                       disabled={readOnly}
+                                    />
+                                 </div>
+                                 <div>
+                                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">المطلوب من الموكل</label>
+                                    <input 
+                                       type="text" 
+                                       className="w-full border dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white" 
+                                       placeholder="مثال: سداد باقي الأتعاب"
+                                       value={nextSessionData.clientRequirements}
+                                       onChange={e => setNextSessionData({...nextSessionData, clientRequirements: e.target.value})}
+                                       disabled={readOnly}
+                                    />
+                                 </div>
+                              </div>
+                           )}
+                        </div>
+                     )}
+
+                     {/* Step 3: Expenses */}
+                     {wizardStep === 3 && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
+                           <div className="text-center p-4 bg-slate-50 dark:bg-slate-700 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 mb-4">
+                              <DollarSign className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                              <p className="text-sm text-slate-500 dark:text-slate-400">تسجيل أي مصاريف إدارية تم دفعها في هذه الجلسة</p>
+                           </div>
+                           <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">المبلغ (ج.م)</label>
+                                 <input 
+                                    type="number" 
+                                    className="w-full border dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                                    value={expensesData.amount}
+                                    onChange={e => setExpensesData({...expensesData, amount: Number(e.target.value)})}
+                                    disabled={readOnly}
+                                 />
+                              </div>
+                              <div>
+                                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">من قام بالدفع؟</label>
+                                 <select 
+                                    className="w-full border dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white"
+                                    value={expensesData.paidBy}
+                                    onChange={e => setExpensesData({...expensesData, paidBy: e.target.value as any})}
+                                    disabled={readOnly}
+                                 >
+                                    <option value="lawyer">المكتب (على حساب الموكل)</option>
+                                    <option value="client">الموكل بنفسه</option>
+                                 </select>
+                              </div>
+                           </div>
+                           <div>
+                              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">بيان المصروفات</label>
+                              <input 
+                                 type="text" 
+                                 className="w-full border dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white" 
+                                 placeholder="مثال: رسوم استخراج شهادة، إكراميات..."
+                                 value={expensesData.description}
+                                 onChange={e => setExpensesData({...expensesData, description: e.target.value})}
+                                 disabled={readOnly}
+                              />
+                           </div>
+                        </div>
+                     )}
+                  </div>
+
+                  {/* Footer Actions */}
+                  <div className="p-5 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 flex justify-between items-center">
+                     <button 
+                        onClick={() => setWizardStep(prev => Math.max(1, prev - 1) as any)}
+                        disabled={wizardStep === 1 || readOnly}
+                        className="px-4 py-2 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-700 hover:shadow-sm rounded-lg disabled:opacity-50 transition-all font-medium"
+                     >
+                        السابق
+                     </button>
+                     
+                     {wizardStep < 3 ? (
+                        <button 
+                           onClick={() => setWizardStep(prev => Math.min(3, prev + 1) as any)}
+                           disabled={readOnly}
+                           className="px-6 py-2 bg-slate-800 dark:bg-slate-700 text-white rounded-lg hover:bg-slate-900 dark:hover:bg-slate-600 transition-colors font-bold flex items-center gap-2 disabled:opacity-50"
+                        >
+                           التالي <ArrowLeftCircle className="w-4 h-4" />
+                        </button>
+                     ) : (
+                        <button 
+                           onClick={handleWizardComplete}
+                           disabled={readOnly}
+                           className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-bold flex items-center gap-2 shadow-lg shadow-green-200 dark:shadow-none disabled:opacity-50"
+                        >
+                           <CheckCircle className="w-4 h-4" /> حفظ وإغلاق
+                        </button>
+                     )}
+                  </div>
+               </div>
+            ) : (
+               // Simple Modal for Adding New Hearings
+               <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md animate-in zoom-in-95 duration-200">
+                  <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between">
+                    <h3 className="font-bold text-slate-900 dark:text-white">إضافة جلسة جديدة</h3>
+                    <button onClick={() => setIsHearingModalOpen(false)}><X className="w-5 h-5 text-slate-400 hover:text-red-500" /></button>
+                  </div>
+                  <form onSubmit={handleSaveHearing} className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                       <div>
+                          <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">التاريخ</label>
+                          <input 
+                            type="date" 
+                            required 
+                            className="w-full border dark:border-slate-600 p-2 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white" 
+                            value={newHearingData.date} 
+                            onChange={e => setNewHearingData({...newHearingData, date: e.target.value})} 
+                          />
+                       </div>
+                       <div>
+                          <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">الوقت</label>
+                          <input 
+                            type="time" 
+                            className="w-full border dark:border-slate-600 p-2 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white" 
+                            value={newHearingData.time} 
+                            onChange={e => setNewHearingData({...newHearingData, time: e.target.value})} 
+                          />
+                       </div>
+                    </div>
                   <div>
                      <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">المطلوب للجلسة</label>
                      <textarea placeholder="المطلوب للجلسة..." className="w-full border dark:border-slate-600 p-2 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white" rows={3} value={newHearingData.requirements} onChange={e => setNewHearingData({...newHearingData, requirements: e.target.value})}></textarea>
@@ -1175,6 +1860,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                   </div>
                 </form>
              </div>
+            )}
           </div>
        )}
     </div>

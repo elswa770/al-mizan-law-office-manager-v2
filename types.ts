@@ -253,6 +253,89 @@ export interface ChatMessage {
   timestamp: string;
 }
 
+export interface CaseMilestone {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  type: 'case_opening' | 'lawsuit_filing' | 'first_hearing' | 'evidence_submission' | 'witness_hearing' | 'expert_report' | 'judgment' | 'appeal' | 'execution' | 'initial_judgment' | 'appeal_judgment' | 'cassation_judgment' | 'enforcement_judgment' | 'other';
+  status: 'pending' | 'completed' | 'delayed';
+  importance: 'low' | 'medium' | 'high' | 'critical';
+  assignedTo?: string;
+  completedAt?: string;
+  notes?: string;
+  relatedDocuments?: string[];
+  relatedHearings?: string[];
+  // New fields for judgment handling
+  judgmentType?: 'initial' | 'appeal' | 'cassation' | 'enforcement';
+  judgmentOutcome?: 'favorable' | 'unfavorable' | 'partial';
+  nextStage?: 'appeal' | 'cassation' | 'enforcement' | 'closed';
+  appealDeadline?: string;
+  cassationDeadline?: string;
+}
+
+export interface CaseProgress {
+  id: string;
+  caseId: string;
+  currentStage: 'initial' | 'investigation' | 'trial' | 'judgment' | 'appeal' | 'execution' | 'closed';
+  milestones: CaseMilestone[];
+  achievements: CaseAchievement[];
+  nextSteps: string[];
+  risks: string[];
+  opportunities: string[];
+  lastUpdated: string;
+  updatedBy: string;
+}
+
+export interface CaseAchievement {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  type: 'document_filed' | 'hearing_won' | 'evidence_admitted' | 'witness_testimony' | 'expert_opinion' | 'settlement' | 'judgment_favorable' | 'procedural_victory' | 'other';
+  impact: 'low' | 'medium' | 'high';
+  documentedBy: string;
+  evidence?: string[];
+  relatedMilestone?: string;
+}
+
+export interface CaseNote {
+  id: string;
+  content: string;
+  date: string;
+  author: string;
+  type: 'progress_update' | 'observation' | 'strategy_note' | 'client_communication' | 'court_note' | 'task_reminder' | 'other';
+  priority: 'low' | 'medium' | 'high';
+  isPrivate: boolean;
+  relatedHearing?: string;
+  relatedDocument?: string;
+  tags?: string[];
+}
+
+export interface CaseProcedure {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  type: 'filing' | 'serving' | 'evidence' | 'motion' | 'objection' | 'appeal' | 'enforcement' | 'appeal_filing' | 'appeal_service' | 'appeal_evidence' | 'appeal_argument' | 'cassation_filing' | 'cassation_service' | 'enforcement_filing' | 'enforcement_service' | 'other';
+  status: 'pending' | 'in_progress' | 'completed' | 'rejected';
+  responsible: string;
+  deadline?: string;
+  outcome?: string;
+  documents?: string[];
+  cost?: number;
+  // Appeal tracking fields
+  appealFilingDate?: string;
+  appealOutcome?: string;
+  appealDeadline?: string;
+  cassationFilingDate?: string;
+  cassationOutcome?: string;
+  cassationDeadline?: string;
+  enforcementFilingDate?: string;
+  enforcementOutcome?: string;
+  enforcementDeadline?: string;
+}
+
 export interface Case {
   id: string;
   title: string;
@@ -281,11 +364,16 @@ export interface Case {
   assignedLawyerId?: string;
   assignedLawyerName?: string; // اسم المحامي المسؤول
   caseType?: LawBranch;
-  filingDate?: string;
+  filingDate?: string; // تاريخ رفع الدعوى
+  caseOpeningDate?: string; // تاريخ فتح القضية
   hearings?: Hearing[];
   deadlines?: string[];
   archiveData?: ArchiveData; // Added archive data field
   closedAt?: string; // تاريخ الإغلاق الفعلي
+  // Enhanced tracking fields
+  progress?: CaseProgress;
+  procedures?: CaseProcedure[];
+  caseNotes?: CaseNote[];
 }
 
 export interface HearingExpenses {

@@ -18,6 +18,7 @@ import Appointments from './pages/Appointments';
 import Locations from './pages/Locations';
 import Lawyers from './pages/Lawyers';
 import LawyerDetails from './pages/LawyerDetails';
+import { logoutUser, loginUser } from './services/authService';
 const Settings = lazy(() => import('./pages/Settings'));
 const AIAssistant = lazy(() => import('./pages/AIAssistant'));
 const DocumentGenerator = lazy(() => import('./pages/DocumentGenerator'));
@@ -467,21 +468,33 @@ function App() {
   // --- Auth Handlers ---
   const handleLogin = async (email: string, password: string) => {
     try {
+      console.log('Attempting login for email:', email);
       const user = await loginUser(email, password);
+      console.log('Login successful, user:', user);
       
       // Update user's last login in Firestore
       try {
+        console.log('Updating last login for user:', user.uid);
         await setDoc(doc(db, 'users', user.uid), {
           lastLogin: new Date().toISOString()
         }, { merge: true });
+        console.log('Last login updated successfully');
       } catch (updateError) {
         console.warn('Failed to update last login:', updateError);
+        // Don't fail login if last login update fails
       }
       
       return true;
     } catch (error: any) {
       console.error('Login error:', error);
-      return false;
+      console.error('Error details:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      
+      // Re-throw the error to be handled by the Login component
+      throw error;
     }
   };
 
@@ -715,21 +728,23 @@ function App() {
           await updateCase(updatedCase.id, updatedCase);
           
           // تحديث الحالة المحلية بشكل صحيح
+          let updatedCases;
           setCases(prev => {
-            const updatedCases = prev.map(c => {
+            updatedCases = prev.map(c => {
               if (c.id === updatedCase.id) {
                 // دمج البيانات بدلاً من الاستبدال الكامل
                 return { ...c, ...updatedCase };
               }
               return c;
             });
+            console.log('App.tsx - Updated cases array:', updatedCases);
+            console.log('App.tsx - Looking for case with ID:', updatedCase.id);
+            console.log('App.tsx - Updated case in array:', updatedCases.find(c => c.id === updatedCase.id));
             return updatedCases;
           });
           
           // Cache the updated data
-          await offlineManager.cacheData('cases', cases.map(c => 
-            c.id === updatedCase.id ? { ...c, ...updatedCase } : c
-          ));
+          await offlineManager.cacheData('cases', updatedCases);
           
         } catch (error) {
           console.error('❌ App.tsx - Firebase error, saving update offline:', error);

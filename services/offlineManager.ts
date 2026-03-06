@@ -197,6 +197,52 @@ class OfflineManager {
     this.notifyStatusChange();
   }
 
+  // Force refresh data from Firebase
+  async refreshFromFirebase(): Promise<void> {
+    if (!navigator.onLine) {
+      console.warn('📱 Cannot refresh from Firebase while offline');
+      return;
+    }
+
+    console.log('🔄 Refreshing data from Firebase...');
+    try {
+      // Import dbService functions to get fresh data
+      const { getHearings } = await import('./dbService');
+      
+      // Get fresh data from Firebase
+      const freshHearings = await getHearings();
+      console.log('📥 Retrieved fresh hearings from Firebase:', freshHearings.length);
+      
+      // Update local cache with fresh data
+      await this.cacheData('hearings', freshHearings);
+      console.log('✅ Updated local cache with fresh Firebase data');
+      
+      // Trigger sync completion notification to update UI
+      this.notifySyncCompleted();
+    } catch (error) {
+      console.error('❌ Failed to refresh from Firebase:', error);
+    }
+  }
+
+  // Manual sync function for users to force sync
+  async forceSyncNow(): Promise<boolean> {
+    if (!navigator.onLine) {
+      console.warn('📱 Cannot sync while offline');
+      return false;
+    }
+
+    console.log('🔄 Force syncing all pending actions...');
+    try {
+      await this.syncPendingActions();
+      // After syncing, refresh data from Firebase to ensure latest state
+      await this.refreshFromFirebase();
+      return true;
+    } catch (error) {
+      console.error('❌ Force sync failed:', error);
+      return false;
+    }
+  }
+
   // Sync pending actions when online
   async syncPendingActions(): Promise<void> {
     if (this.syncInProgress || !navigator.onLine) return;
@@ -217,9 +263,19 @@ class OfflineManager {
           console.error(`Failed to sync action ${action.id}:`, error);
           action.retryCount = (action.retryCount || 0) + 1;
           
-          if (action.retryCount < 3) {
+          // For document not found errors, don't retry - just remove the action
+          if (error.message?.includes('No document to update') || 
+              error.message?.includes('No document to create') ||
+              error.code === 'not-found' ||
+              error.code === 'permission-denied') {
+            console.log(`🗑️ Removing failed action ${action.id} due to unrecoverable error`);
+            await this.removePendingAction(action.id);
+            await this.logSyncAction(action, 'failed');
+          } else if (action.retryCount < 3) {
+            console.log(`🔄 Retrying action ${action.id} (attempt ${action.retryCount}/3)`);
             await this.updatePendingAction(action);
           } else {
+            console.log(`🗑️ Max retries reached for action ${action.id}, removing...`);
             await this.removePendingAction(action.id);
             await this.logSyncAction(action, 'failed');
           }
@@ -443,8 +499,43 @@ class OfflineManager {
         const realUpdateId = this.getRealId(data.id);
         console.log(`🔄 Updating hearing with ID: ${data.id} (real: ${realUpdateId})`);
         
-        // Update in Firestore using real ID
-        await updateHearing(realUpdateId, data);
+        try {
+          // Try to update in Firestore using real ID
+          await updateHearing(realUpdateId, data);
+        } catch (error: any) {
+          // If document doesn't exist, create it instead with the specific ID
+          if (error.message?.includes('No document to update') || error.code === 'not-found') {
+            console.log(`📝 Document ${realUpdateId} not found, creating instead...`);
+            
+            // Import doc function to create with specific ID
+            const { doc, setDoc } = await import('firebase/firestore');
+            const { db } = await import('./firebaseConfig');
+            
+            // Create document with specific ID (without the id field in the data)
+            const { id, ...hearingData } = data;
+            await setDoc(doc(db, "hearings", realUpdateId), hearingData);
+            console.log(`✅ Created hearing document with ID: ${realUpdateId}`);
+            
+            // Update local cache to include the newly created document
+            try {
+              const cachedHearings = await this.getCachedData('hearings') || [];
+              const updatedHearing = { id: realUpdateId, ...hearingData };
+              const updatedCache = cachedHearings.map(h => 
+                h.id === data.id ? updatedHearing : h
+              );
+              await this.cacheData('hearings', updatedCache);
+              console.log('✅ Updated local cache with newly created hearing');
+              
+              // Trigger sync completion notification to update UI
+              this.notifySyncCompleted();
+            } catch (cacheError) {
+              console.warn('⚠️ Failed to update local cache:', cacheError);
+            }
+          } else {
+            // Re-throw other errors
+            throw error;
+          }
+        }
         break;
       case 'delete':
         if (!data.id) {
