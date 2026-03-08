@@ -4,6 +4,7 @@ import { Case, Client, CaseStatus, CourtType, LawBranch, Lawyer, Hearing } from 
 import { Briefcase, Search, Plus, Filter, User, Calendar, MapPin, ArrowUpRight, X, Save, Gavel, LayoutGrid, List, Users, Scale, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch, performCurrentPageSearch } from '../utils/currentPageSearch';
 
 interface SearchSuggestion {
   id: string;
@@ -19,11 +20,17 @@ interface CasesProps {
   hearings: Hearing[];
   onCaseClick: (caseId: string) => void;
   onAddCase?: (newCase: Omit<Case, 'id'>) => void;
+  onUpdateCase?: (updatedCase: Case) => void;
+  onDeleteCase?: (caseId: string) => void;
+  onAddClient?: (newClient: Omit<Client, 'id'>) => void;
+  onAddHearing?: (newHearing: Omit<Hearing, 'id'>) => void;
   readOnly?: boolean;
+  currentUser?: any;
 }
 
-const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCaseClick, onAddCase, readOnly = false }) => {
-  // --- Offline Status ---
+const Cases: React.FC<CasesProps> = ({ 
+  cases, clients, hearings, lawyers, onCaseClick, onAddCase, onUpdateCase, onDeleteCase, onAddClient, onAddHearing, readOnly = false, currentUser 
+}) => {
   const offlineStatus = useOfflineStatus();
   const isOnline = offlineStatus?.online ?? true;
   const pendingCount = offlineStatus?.pendingActions ?? 0;
@@ -37,6 +44,102 @@ const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCase
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [forceRerender, setForceRerender] = useState(0); // Force re-render for offline updates
+  
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (القضايا):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          const results = performCurrentPageSearch(query, 'cases', cases);
+          console.log(`🔍 نتائج البحث الصوتي في القضايا: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [cases, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في القضايا:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for cases (not clients)
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isCaseSearch = normalizedQuery.includes('قضية') || normalizedQuery.includes('حكم') || 
+                           normalizedQuery.includes('استئناف') || normalizedQuery.includes('دعوى') ||
+                           normalizedQuery.includes('طعن') || normalizedQuery.includes('مستأنف') ||
+                           normalizedQuery.includes('محكمة') || normalizedQuery.includes('قاضي') ||
+                           normalizedQuery.includes('جلسة') || normalizedQuery.includes('حكم نهائي') ||
+                           normalizedQuery.includes('حكم ابتدائي') || normalizedQuery.includes('استئناف') ||
+                           normalizedQuery.includes('نقض') || normalizedQuery.includes('خصم') ||
+                           normalizedQuery.includes('الخصومة') || normalizedQuery.includes('محاكم');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isCaseSearch });
+        
+        // Only apply search if it's actually for cases
+        if (isCaseSearch) {
+          console.log('✅ تطبيق البحث الصوتي للقضايا:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const resultsCount = cases.filter(c => 
+              c.title.toLowerCase().includes(voiceSearchQuery.toLowerCase()) || 
+              c.caseNumber.includes(voiceSearchQuery) || 
+              c.clientName.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              c.court.toLowerCase().includes(voiceSearchQuery.toLowerCase())
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في القضايا: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للقضايا، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [cases, recentSearches]);
   
   // Force re-render when cases change (for offline updates)
   useEffect(() => {

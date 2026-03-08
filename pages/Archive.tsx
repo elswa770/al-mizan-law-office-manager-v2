@@ -11,6 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
 import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch } from '../utils/currentPageSearch';
 
 // Local SearchSuggestion interface for Archive page
 interface ArchiveSearchSuggestion {
@@ -33,6 +34,267 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'archived' | 'active'>('archived');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (الأرشيف):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          // Search in all archive data
+          const archiveItems = [
+            ...cases.map(c => ({ ...c, itemType: 'case' as const })),
+            ...clients.map(c => ({ ...c, itemType: 'client' as const }))
+          ];
+          
+          const results = archiveItems.filter(item => 
+            (item as any).title?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).caseNumber?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).clientName?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).description?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).status?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).archiveLocation?.name?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).archiveRequest?.title?.toLowerCase().includes(query.toLowerCase()) ||
+            // Search in room, rack, shelf, box
+            (item as any).archiveLocation?.name?.toLowerCase().includes('غرفة') ||
+            (item as any).archiveLocation?.name?.toLowerCase().includes('رف') ||
+            (item as any).archiveLocation?.name?.toLowerCase().includes('صندوق') ||
+            (item as any).archiveLocation?.name?.toLowerCase().includes('دولاب') ||
+            (item as any).archiveLocation?.name?.toLowerCase().includes('خزنة') ||
+            (item as any).archiveLocation?.name?.toLowerCase().includes('مخزن')
+          );
+          
+          console.log(`🔍 نتائج البحث الصوتي في الأرشيف: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [cases, clients, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في الأرشيف:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for archive
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isArchiveSearch = normalizedQuery.includes('أرشيف') || normalizedQuery.includes('أرشفة') ||
+                               normalizedQuery.includes('أرشفة') || normalizedQuery.includes('أرشيف') ||
+                               normalizedQuery.includes('محفوظة') || normalizedQuery.includes('محفوظات') ||
+                               normalizedQuery.includes('مؤرشفة') || normalizedQuery.includes('مؤرشفات') ||
+                               normalizedQuery.includes('مستودع') || normalizedQuery.includes('مستودعات') ||
+                               normalizedQuery.includes('خزنة') || normalizedQuery.includes('خزائن') ||
+                               normalizedQuery.includes('حفظ') || normalizedQuery.includes('حفظات') ||
+                               normalizedQuery.includes('تخزين') || normalizedQuery.includes('تخزين') ||
+                               normalizedQuery.includes('أرشفة') || normalizedQuery.includes('مؤرشفة') ||
+                               normalizedQuery.includes('قضية') || normalizedQuery.includes('قضايا') ||
+                               normalizedQuery.includes('مؤرشفة') || normalizedQuery.includes('مؤرشفات') ||
+                               // Search in room, rack, shelf, box
+                               normalizedQuery.includes('غرفة') || normalizedQuery.includes('رف') ||
+                               normalizedQuery.includes('صندوق') || normalizedQuery.includes('دولاب') ||
+                               normalizedQuery.includes('خزنة') || normalizedQuery.includes('مخزن');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isArchiveSearch });
+        
+        // Only apply search if it's actually for archive
+        if (isArchiveSearch) {
+          console.log('✅ تطبيق البحث الصوتي للأرشيف:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const archiveItems = [
+              ...cases.map(c => ({ ...c, itemType: 'case' as const })),
+              ...clients.map(c => ({ ...c, itemType: 'client' as const }))
+            ];
+            
+            const resultsCount = archiveItems.filter(item => 
+              (item as any).title?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).caseNumber?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).clientName?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).description?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).status?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).archiveLocation?.name?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).archiveRequest?.title?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              // Search in room, rack, shelf, box
+              (item as any).archiveLocation?.name?.toLowerCase().includes('غرفة') ||
+              (item as any).archiveLocation?.name?.toLowerCase().includes('رف') ||
+              (item as any).archiveLocation?.name?.toLowerCase().includes('صندوق') ||
+              (item as any).archiveLocation?.name?.toLowerCase().includes('دولاب') ||
+              (item as any).archiveLocation?.name?.toLowerCase().includes('خزنة') ||
+              (item as any).archiveLocation?.name?.toLowerCase().includes('مخزن')
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في الأرشيف: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للأرشيف، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [cases, clients, recentSearches]);
+
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (الأرشيف):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          const archiveItems = [
+            ...cases.map(c => ({ ...c, itemType: 'case' as const })),
+            ...clients.map(c => ({ ...c, itemType: 'client' as const }))
+          ];
+          
+          const results = archiveItems.filter(item => 
+            (item as any).title?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).caseNumber?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).clientName?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).description?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).status?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).archiveLocation?.name?.toLowerCase().includes(query.toLowerCase()) ||
+            (item as any).archiveRequest?.title?.toLowerCase().includes(query.toLowerCase())
+          );
+          
+          console.log(`🔍 نتائج البحث الصوتي في الأرشيف: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [cases, clients, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في الأرشيف:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for archive
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isArchiveSearch = normalizedQuery.includes('أرشيف') || normalizedQuery.includes('أرشفة') ||
+                               normalizedQuery.includes('أرشفة') || normalizedQuery.includes('أرشيف') ||
+                               normalizedQuery.includes('محفوظة') || normalizedQuery.includes('محفوظات') ||
+                               normalizedQuery.includes('مؤرشفة') || normalizedQuery.includes('مؤرشفات') ||
+                               normalizedQuery.includes('مستودع') || normalizedQuery.includes('مستودعات') ||
+                               normalizedQuery.includes('خزنة') || normalizedQuery.includes('خزائن') ||
+                               normalizedQuery.includes('حفظ') || normalizedQuery.includes('حفظات') ||
+                               normalizedQuery.includes('تخزين') || normalizedQuery.includes('تخزين') ||
+                               normalizedQuery.includes('أرشفة') || normalizedQuery.includes('مؤرشفة') ||
+                               normalizedQuery.includes('قضية') || normalizedQuery.includes('قضايا') ||
+                               normalizedQuery.includes('مؤرشفة') || normalizedQuery.includes('مؤرشفات');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isArchiveSearch });
+        
+        // Only apply search if it's actually for archive
+        if (isArchiveSearch) {
+          console.log('✅ تطبيق البحث الصوتي للأرشيف:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const archiveItems = [
+              ...cases.map(c => ({ ...c, itemType: 'case' as const })),
+              ...clients.map(c => ({ ...c, itemType: 'client' as const }))
+            ];
+            
+            const resultsCount = archiveItems.filter(item => 
+              (item as any).title?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).caseNumber?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).clientName?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).description?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).status?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).archiveLocation?.name?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (item as any).archiveRequest?.title?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في الأرشيف: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للأرشيف، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [cases, clients, recentSearches]);
 
   // Function to update case status with closed date
   const updateCaseStatus = async (caseId: string, newStatus: CaseStatus) => {

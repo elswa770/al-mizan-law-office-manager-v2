@@ -1,9 +1,10 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Case, Hearing, CaseStatus, HearingStatus, Lawyer } from '../types';
 import { Calendar, MapPin, Gavel, AlertCircle, X, Edit3, Link as LinkIcon, ExternalLink, ChevronLeft, ChevronRight, List, LayoutGrid, Clock, Filter, Printer, Download, Plus, CheckSquare, AlignJustify, DollarSign, CalendarDays, ArrowLeftCircle, CheckCircle, FileText, Upload, Image as ImageIcon, Eye, Trash2, Wifi, WifiOff, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { useOfflineStatus, useOfflineActions } from '../hooks/useOfflineStatus';
 import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch, performCurrentPageSearch } from '../utils/currentPageSearch';
 
 // Local SearchSuggestion interface for Hearings page
 interface HearingsSearchSuggestion {
@@ -53,6 +54,97 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
       setIsSyncing(false);
     }
   };
+
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (الجلسات):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          const results = performCurrentPageSearch(query, 'hearings', hearings);
+          console.log(`🔍 نتائج البحث الصوتي في الجلسات: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [hearings, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في الجلسات:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for hearings (not cases or clients)
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isHearingSearch = normalizedQuery.includes('جلسة') || normalizedQuery.includes('مواعيد') ||
+                               normalizedQuery.includes('قاضي') || normalizedQuery.includes('محكمة') ||
+                               normalizedQuery.includes('جلسات') || normalizedQuery.includes('موعد');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isHearingSearch });
+        
+        // Only apply search if it's actually for hearings
+        if (isHearingSearch) {
+          console.log('✅ تطبيق البحث الصوتي للجلسات:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const resultsCount = hearings.filter(hearing => 
+              hearing.caseId?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              hearing.court?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              hearing.judge?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              hearing.type?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في الجلسات: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للجلسات، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [hearings, recentSearches]);
   
   // Delete Hearing Handler
   const handleDeleteHearing = (hearingId: string) => {

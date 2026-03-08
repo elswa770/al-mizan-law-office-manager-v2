@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { LegalReference, ReferenceType, LawBranch } from '../types';
 import { searchLegalReferences, fetchDetailedReferenceContent } from '../services/geminiService';
 import { getLegalReferences, addLegalReference, toggleFavoriteReference } from '../services/dbService';
@@ -8,6 +8,7 @@ import { Search, Book, Scale, FileText, Library, Filter, Plus, X, Tag, Gavel, Bo
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch } from '../utils/currentPageSearch';
 
 // Local SearchSuggestion interface for LegalReferences page
 interface LegalReferencesSearchSuggestion {
@@ -29,6 +30,121 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
   const [selectedBranch, setSelectedBranch] = useState<LawBranch | 'all'>('all');
   const [selectedType, setSelectedType] = useState<ReferenceType | 'all'>('all');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (المراجع القانونية):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          const results = references.filter(ref => 
+            ref.title.toLowerCase().includes(query.toLowerCase()) ||
+            (ref.description && ref.description.toLowerCase().includes(query.toLowerCase())) ||
+            (ref.articleNumber && ref.articleNumber.toLowerCase().includes(query.toLowerCase())) ||
+            (ref.courtName && ref.courtName.toLowerCase().includes(query.toLowerCase())) ||
+            (ref.author && ref.author.toLowerCase().includes(query.toLowerCase())) ||
+            (ref.tags && ref.tags.some(tag => tag.toLowerCase().includes(query.toLowerCase()))) ||
+            (ref.year && ref.year.toString().includes(query)) ||
+            ref.branch.toLowerCase().includes(query.toLowerCase()) ||
+            ref.type.toLowerCase().includes(query.toLowerCase())
+          );
+          
+          console.log(`🔍 نتائج البحث الصوتي في المراجع القانونية: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [references, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في المراجع القانونية:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for legal references
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isLegalReferenceSearch = normalizedQuery.includes('قانون') || normalizedQuery.includes('قوانين') ||
+                                       normalizedQuery.includes('مرجع') || normalizedQuery.includes('مراجع') ||
+                                       normalizedQuery.includes('مادة') || normalizedQuery.includes('مواد') ||
+                                       normalizedQuery.includes('نص') || normalizedQuery.includes('نصوص') ||
+                                       normalizedQuery.includes('تشريع') || normalizedQuery.includes('تشريعات') ||
+                                       normalizedQuery.includes('لائحة') || normalizedQuery.includes('لوائح') ||
+                                       normalizedQuery.includes('قرار') || normalizedQuery.includes('قرارات') ||
+                                       normalizedQuery.includes('حكم') || normalizedQuery.includes('أحكام') ||
+                                       normalizedQuery.includes('فتوى') || normalizedQuery.includes('فتاوى') ||
+                                       normalizedQuery.includes('رأي') || normalizedQuery.includes('آراء') ||
+                                       normalizedQuery.includes('محكمة') || normalizedQuery.includes('محاكم');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isLegalReferenceSearch });
+        
+        // Only apply search if it's actually for legal references
+        if (isLegalReferenceSearch) {
+          console.log('✅ تطبيق البحث الصوتي للمراجع القانونية:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const resultsCount = references.filter(ref => 
+              ref.title.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              (ref.description && ref.description.toLowerCase().includes(voiceSearchQuery.toLowerCase())) ||
+              (ref.articleNumber && ref.articleNumber.toLowerCase().includes(voiceSearchQuery.toLowerCase())) ||
+              (ref.courtName && ref.courtName.toLowerCase().includes(voiceSearchQuery.toLowerCase())) ||
+              (ref.author && ref.author.toLowerCase().includes(voiceSearchQuery.toLowerCase())) ||
+              (ref.tags && ref.tags.some(tag => tag.toLowerCase().includes(voiceSearchQuery.toLowerCase()))) ||
+              (ref.year && ref.year.toString().includes(voiceSearchQuery)) ||
+              ref.branch.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              ref.type.toLowerCase().includes(voiceSearchQuery.toLowerCase())
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في المراجع القانونية: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للمراجع القانونية، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [references, recentSearches]);
   
   // Firebase State
   const [firebaseReferences, setFirebaseReferences] = useState<LegalReference[]>([]);

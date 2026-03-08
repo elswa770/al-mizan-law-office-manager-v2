@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Case, Client, Hearing, Task, CaseStatus, HearingStatus, ReportTemplate, ScheduledReport } from '../types';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
@@ -8,10 +8,12 @@ import {
 import { 
   TrendingUp, TrendingDown, DollarSign, Activity, Scale, Gavel, 
   Users, AlertCircle, Calendar, Printer, Filter, PieChart as PieIcon, Download, Building2, FileText, List,
-  Plus, Edit3, Trash2, Clock, Mail, FileSpreadsheet, File as FileIcon, PenTool, CheckCircle
+  Plus, Edit3, Trash2, Clock, Mail, FileSpreadsheet, File as FileIcon, PenTool, CheckCircle, Search
 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch } from '../utils/currentPageSearch';
 
 interface ReportsProps {
   cases: Case[];
@@ -25,7 +27,128 @@ const COLORS = ['#0ea5e9', '#22c55e', '#eab308', '#ef4444', '#8b5cf6', '#64748b'
 const Reports: React.FC<ReportsProps> = ({ cases, clients, hearings, tasks }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'financial' | 'operational' | 'builder' | 'scheduled'>('overview');
   const [dateRange, setDateRange] = useState('year'); // month, year, all
+  const [searchTerm, setSearchTerm] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (التقارير):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          // Search in reports data
+          const reportItems = [
+            { type: 'case', data: cases },
+            { type: 'client', data: clients },
+            { type: 'hearing', data: hearings },
+            { type: 'task', data: tasks }
+          ];
+          
+          const results = reportItems.filter(item => 
+            item.data.some(d => 
+              (d as any).title?.toLowerCase().includes(query.toLowerCase()) ||
+              (d as any).name?.toLowerCase().includes(query.toLowerCase()) ||
+              (d as any).description?.toLowerCase().includes(query.toLowerCase()) ||
+              (d as any).status?.toLowerCase().includes(query.toLowerCase())
+            )
+          );
+          
+          console.log(`🔍 نتائج البحث الصوتي في التقارير: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [cases, clients, hearings, tasks, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في التقارير:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for reports
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isReportSearch = normalizedQuery.includes('تقرير') || normalizedQuery.includes('تقارير') ||
+                               normalizedQuery.includes('إحصائية') || normalizedQuery.includes('إحصائيات') ||
+                               normalizedQuery.includes('تحليل') || normalizedQuery.includes('إحصاء') ||
+                               normalizedQuery.includes('بيانات') || normalizedQuery.includes('ملخص') ||
+                               normalizedQuery.includes('دراسة') || normalizedQuery.includes('بحث') ||
+                               normalizedQuery.includes('كشف') || normalizedQuery.includes('قائمة');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isReportSearch });
+        
+        // Only apply search if it's actually for reports
+        if (isReportSearch) {
+          console.log('✅ تطبيق البحث الصوتي للتقارير:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const reportItems = [
+              { type: 'case', data: cases },
+              { type: 'client', data: clients },
+              { type: 'hearing', data: hearings },
+              { type: 'task', data: tasks }
+            ];
+            
+            const resultsCount = reportItems.filter(item => 
+              item.data.some(d => 
+                (d as any).title?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+                (d as any).name?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+                (d as any).description?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+                (d as any).status?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
+              )
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في التقارير: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للتقارير، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [cases, clients, hearings, tasks, recentSearches]);
 
   // --- Report Builder State ---
   const [templates, setTemplates] = useState<ReportTemplate[]>([

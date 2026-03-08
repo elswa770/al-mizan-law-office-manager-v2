@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Lawyer, LawyerStatus, LawyerSpecialization, LawyerRole, BarLevel } from '../types';
 import { 
   Users, Search, Filter, Plus, Phone, Mail, MapPin, Briefcase, 
   Award, DollarSign, Calendar, MoreVertical, Edit3, Trash2, CheckCircle, XCircle 
 } from 'lucide-react';
 import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch } from '../utils/currentPageSearch';
 
 // Local SearchSuggestion interface for Lawyers page
 interface LawyersSearchSuggestion {
@@ -31,6 +32,123 @@ const Lawyers: React.FC<LawyersProps> = ({
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLawyer, setEditingLawyer] = useState<Lawyer | null>(null);
+
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (المحامين):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          const results = lawyers.filter(lawyer => 
+            lawyer.name.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.specialization.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.barNumber.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.email?.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.phone?.includes(query) ||
+            lawyer.officeLocation.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.bio.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.education.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.languages.some(lang => lang.toLowerCase().includes(query.toLowerCase())) ||
+            lawyer.role.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.status.toLowerCase().includes(query.toLowerCase()) ||
+            lawyer.barLevel.toLowerCase().includes(query.toLowerCase())
+          );
+          
+          console.log(`🔍 نتائج البحث الصوتي في المحامين: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [lawyers, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في المحامين:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for lawyers
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isLawyerSearch = normalizedQuery.includes('محامي') || normalizedQuery.includes('محامين') ||
+                              normalizedQuery.includes('محامية') || normalizedQuery.includes('استشارة') ||
+                              normalizedQuery.includes('محاماة') || normalizedQuery.includes('كليف') ||
+                              normalizedQuery.includes('محاكم') || normalizedQuery.includes('نقابة') ||
+                              normalizedQuery.includes('دفاع') || normalizedQuery.includes('مرافعة') ||
+                              normalizedQuery.includes('مستشار') || normalizedQuery.includes('خبير') ||
+                              normalizedQuery.includes('محكمة') || normalizedQuery.includes('قاضي');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isLawyerSearch });
+        
+        // Only apply search if it's actually for lawyers
+        if (isLawyerSearch) {
+          console.log('✅ تطبيق البحث الصوتي للمحامين:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const resultsCount = lawyers.filter(lawyer => 
+              lawyer.name.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.specialization.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.barNumber.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.email?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.phone?.includes(voiceSearchQuery) ||
+              lawyer.officeLocation.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.bio.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.education.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.languages.some(lang => lang.toLowerCase().includes(voiceSearchQuery.toLowerCase())) ||
+              lawyer.role.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.status.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              lawyer.barLevel.toLowerCase().includes(voiceSearchQuery.toLowerCase())
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في المحامين: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للمحامين، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [lawyers, recentSearches]);
 
   const [formData, setFormData] = useState<Partial<Lawyer>>({
     name: '',

@@ -4,6 +4,7 @@ import { FileText, Search, Filter, FolderOpen, User, Briefcase, File, Gavel, Fil
 import CloudDocumentUpload from '../components/CloudDocumentUpload';
 import { googleDriveService } from '../services/googleDriveService';
 import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch, performCurrentPageSearch } from '../utils/currentPageSearch';
 
 // Local SearchSuggestion interface for Documents page
 interface DocumentsSearchSuggestion {
@@ -45,6 +46,137 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
   const [sourceFilter, setSourceFilter] = useState<'all' | 'case' | 'client'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (المستندات):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          // Simple document search without complex typing
+          const allDocs: any[] = [];
+          
+          cases.forEach(c => {
+            if (c.documents) {
+              c.documents.forEach(d => {
+                allDocs.push({
+                  ...d,
+                  caseId: c.id,
+                  caseTitle: c.title,
+                  clientName: c.clientName
+                });
+              });
+            }
+          });
+          
+          clients.forEach(c => {
+            if (c.documents) {
+              c.documents.forEach(d => {
+                allDocs.push({
+                  ...d,
+                  clientId: c.id,
+                  clientName: c.name
+                });
+              });
+            }
+          });
+          
+          const results = allDocs.filter(doc => 
+            doc.title && doc.title.toLowerCase().includes(query.toLowerCase()) ||
+            doc.type && doc.type.toLowerCase().includes(query.toLowerCase()) ||
+            doc.caseTitle && doc.caseTitle.toLowerCase().includes(query.toLowerCase()) ||
+            doc.clientName && doc.clientName.toLowerCase().includes(query.toLowerCase())
+          );
+          
+          console.log(`🔍 نتائج البحث الصوتي في المستندات: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [cases, clients, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في المستندات:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for documents
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isDocumentSearch = normalizedQuery.includes('مستند') || normalizedQuery.includes('ملف') ||
+                               normalizedQuery.includes('عقد') || normalizedQuery.includes('وكالة') ||
+                               normalizedQuery.includes('حكم') || normalizedQuery.includes('صك') ||
+                               normalizedQuery.includes('إيصال') || normalizedQuery.includes('فاتورة') ||
+                               normalizedQuery.includes('تقرير') || normalizedQuery.includes('محضر') ||
+                               normalizedQuery.includes('مستندات') || normalizedQuery.includes('ملفات');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isDocumentSearch });
+        
+        // Only apply search if it's actually for documents
+        if (isDocumentSearch) {
+          console.log('✅ تطبيق البحث الصوتي للمستندات:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const allDocsLegacy = [...cases.flatMap(c => c.documents?.map(d => ({ ...d, caseId: c.id, caseTitle: c.title, clientName: c.clientName }) || [])), 
+              ...clients.flatMap(c => c.documents?.map(d => ({ ...d, clientId: c.id, clientName: c.name }) || []))];
+            
+            const resultsCount = allDocsLegacy.filter(doc => 
+              doc.title.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              doc.type?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              doc.caseTitle?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              doc.clientName?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في المستندات: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للمستندات، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [cases, clients, recentSearches]);
 
   // --- Upload Modal State ---
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);

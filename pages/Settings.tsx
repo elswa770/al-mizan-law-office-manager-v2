@@ -53,6 +53,9 @@ const MODULES = [
   { id: 'ai-assistant', label: 'المساعد الذكي' },
   { id: 'locations', label: 'دليل المحاكم' }, // Added
   { id: 'calculators', label: 'الحاسبات القانونية' }, // Added
+  { id: 'search', label: 'البحث المتقدم' }, // Added search module
+  { id: 'voice_search', label: 'البحث الصوتي' }, // Added voice search module
+  { id: 'notifications', label: 'الإشعارات' }, // Added notifications module
   { id: 'settings', label: 'الإعدادات والمستخدمين' },
 ];
 

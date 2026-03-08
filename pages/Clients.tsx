@@ -4,6 +4,7 @@ import { Client, Case, Hearing, ClientType, ClientStatus } from '../types';
 import { User, Phone, MapPin, Search, Plus, X, Save, Mail, FileText, Grid, List, Building2, Filter, Download, MessageCircle, ArrowUpRight, DollarSign, Calendar, FileSpreadsheet, Printer, AlertTriangle, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch, performCurrentPageSearch } from '../utils/currentPageSearch';
 
 interface SearchSuggestion {
   id: string;
@@ -35,6 +36,103 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [forceRerender, setForceRerender] = useState(0); // Force re-render for offline updates
+  
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (الموكلين):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          const results = performCurrentPageSearch(query, 'clients', clients);
+          console.log(`🔍 نتائج البحث الصوتي في الموكلين: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [clients, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في الموكلين:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for clients (not cases)
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isClientSearch = !normalizedQuery.includes('قضية') && !normalizedQuery.includes('حكم') && 
+                             !normalizedQuery.includes('استئناف') && !normalizedQuery.includes('دعوى') &&
+                             !normalizedQuery.includes('طعن') && !normalizedQuery.includes('مستأنف') &&
+                             !normalizedQuery.includes('محكمة') && !normalizedQuery.includes('قاضي') &&
+                             !normalizedQuery.includes('جلسة') && !normalizedQuery.includes('حكم نهائي') &&
+                             !normalizedQuery.includes('حكم ابتدائي') && !normalizedQuery.includes('نقض') &&
+                             !normalizedQuery.includes('خصم') && !normalizedQuery.includes('الخصومة') &&
+                             !normalizedQuery.includes('محاكم');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isClientSearch });
+        
+        // Only apply search if it's actually for clients
+        if (isClientSearch) {
+          console.log('✅ تطبيق البحث الصوتي للموكلين:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const resultsCount = clients.filter(client => 
+              client.name.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              client.phone?.includes(voiceSearchQuery) ||
+              client.email?.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              client.nationalId?.includes(voiceSearchQuery) ||
+              client.address?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي للموكلين: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للموكلين، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [clients, recentSearches]);
   
   // Force re-render when clients change (for offline updates)
   useEffect(() => {

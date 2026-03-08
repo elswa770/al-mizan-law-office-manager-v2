@@ -34,6 +34,33 @@ const EnhancedSearch: React.FC<EnhancedSearchProps> = ({
   
   const debouncedQuery = useDebounce(query, 300);
 
+  // Check for voice search query from localStorage on mount
+  React.useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    
+    if (voiceSearchQuery && voiceSearchTimestamp) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      // Use voice search query if it's less than 10 seconds old
+      if (now - timestamp < 10000) {
+        setQuery(voiceSearchQuery);
+        onSearch(voiceSearchQuery);
+        
+        // Clear the stored voice search after using it
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+      }
+    }
+  }, [onSearch]);
+
   // Handle search with debouncing
   React.useEffect(() => {
     onSearch(debouncedQuery);

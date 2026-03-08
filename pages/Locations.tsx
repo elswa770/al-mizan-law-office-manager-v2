@@ -9,6 +9,7 @@ import {
   deleteLocation 
 } from '../services/dbService';
 import EnhancedSearch from '../components/EnhancedSearch';
+import { shouldSearchInCurrentPage, getCurrentPageSearchQuery, clearCurrentPageSearch } from '../utils/currentPageSearch';
 
 // Local SearchSuggestion interface for Locations page
 interface LocationsSearchSuggestion {
@@ -49,6 +50,109 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
 
     loadLocations();
   }, []);
+
+  // Check for voice search query in current page
+  useEffect(() => {
+    if (shouldSearchInCurrentPage()) {
+      const query = getCurrentPageSearchQuery();
+      
+      if (query) {
+        console.log('🔍 البحث الصوتي في الصفحة الحالية (المواقع):', query);
+        
+        // Apply search to current page
+        setSearchTerm(query);
+        
+        // Add to recent searches
+        if (!recentSearches.includes(query)) {
+          setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+        }
+        
+        // Show results count
+        setTimeout(() => {
+          const results = locations.filter(location => 
+            location.name.toLowerCase().includes(query.toLowerCase()) ||
+            location.type.toLowerCase().includes(query.toLowerCase()) ||
+            location.address.toLowerCase().includes(query.toLowerCase()) ||
+            location.governorate.toLowerCase().includes(query.toLowerCase()) ||
+            location.phone?.includes(query)
+          );
+          
+          console.log(`🔍 نتائج البحث الصوتي في المواقع: "${query}" - ${results.length} نتيجة`);
+        }, 500);
+        
+        // Clear search after applying
+        clearCurrentPageSearch();
+      }
+    }
+  }, [locations, recentSearches]);
+
+  // Legacy voice search check (for backward compatibility)
+  useEffect(() => {
+    const voiceSearchQuery = localStorage.getItem('voiceSearchQuery');
+    const voiceSearchTimestamp = localStorage.getItem('voiceSearchTimestamp');
+    const searchType = localStorage.getItem('searchType');
+    const searchInCurrent = localStorage.getItem('searchInCurrentPage');
+    
+    console.log('🔍 التحقق من البحث الصوتي في المواقع:', { voiceSearchQuery, searchType, searchInCurrent });
+    
+    // Only apply legacy search if not current page search
+    if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
+      const timestamp = parseInt(voiceSearchTimestamp);
+      const now = Date.now();
+      
+      if (now - timestamp < 15000) {
+        // Check if this search is actually for locations
+        const normalizedQuery = voiceSearchQuery.toLowerCase();
+        const isLocationSearch = normalizedQuery.includes('محكمة') || normalizedQuery.includes('محاكم') ||
+                               normalizedQuery.includes('موقع') || normalizedQuery.includes('مواقع') ||
+                               normalizedQuery.includes('عنوان') || normalizedQuery.includes('عناوين') ||
+                               normalizedQuery.includes('محافظة') || normalizedQuery.includes('محافظات') ||
+                               normalizedQuery.includes('مقر') || normalizedQuery.includes('مكتب') ||
+                               normalizedQuery.includes('فرع') || normalizedQuery.includes('فروع') ||
+                               normalizedQuery.includes('تليفون') || normalizedQuery.includes('هاتف');
+        
+        console.log('🎯 تحليل البحث:', { normalizedQuery, isLocationSearch });
+        
+        // Only apply search if it's actually for locations
+        if (isLocationSearch) {
+          console.log('✅ تطبيق البحث الصوتي للمواقع:', voiceSearchQuery);
+          setSearchTerm(voiceSearchQuery);
+          
+          // Add to recent searches
+          if (!recentSearches.includes(voiceSearchQuery)) {
+            setRecentSearches(prev => [voiceSearchQuery, ...prev.slice(0, 4)]);
+          }
+          
+          // Show voice search notification
+          setTimeout(() => {
+            const resultsCount = locations.filter(location => 
+              location.name.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              location.type.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              location.address.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              location.governorate.toLowerCase().includes(voiceSearchQuery.toLowerCase()) ||
+              location.phone?.includes(voiceSearchQuery)
+            ).length;
+            
+            console.log(`🔍 البحث الصوتي في المواقع: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+          }, 500);
+        } else {
+          console.log('❌ هذا البحث ليس للمواقع، سيتم تجاهله:', voiceSearchQuery);
+        }
+        
+        // Always clear the stored voice search after checking
+        setTimeout(() => {
+          localStorage.removeItem('voiceSearchQuery');
+          localStorage.removeItem('voiceSearchTimestamp');
+          localStorage.removeItem('searchType');
+        }, 1000);
+      } else {
+        // Clear old voice search queries
+        localStorage.removeItem('voiceSearchQuery');
+        localStorage.removeItem('voiceSearchTimestamp');
+        localStorage.removeItem('searchType');
+      }
+    }
+  }, [locations, recentSearches]);
 
   // --- Search Suggestions ---
   const suggestions = useMemo(() => {

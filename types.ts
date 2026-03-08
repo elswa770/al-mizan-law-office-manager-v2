@@ -114,6 +114,31 @@ export interface Permission {
   access: PermissionLevel;
 }
 
+// Module IDs for permissions
+export const MODULE_IDS = {
+  // Existing modules (add as needed)
+  DASHBOARD: 'dashboard',
+  CASES: 'cases',
+  CLIENTS: 'clients',
+  APPOINTMENTS: 'appointments',
+  HEARINGS: 'hearings',
+  TASKS: 'tasks',
+  DOCUMENTS: 'documents',
+  FEES: 'fees',
+  REPORTS: 'reports',
+  LOCATIONS: 'locations',
+  CALCULATORS: 'calculators',
+  GENERATOR: 'generator',
+  ARCHIVE: 'archive',
+  LAWYERS: 'lawyers',
+  AI_ASSISTANT: 'ai-assistant',
+  REFERENCES: 'references',
+  SETTINGS: 'settings',
+  SEARCH: 'search',
+  VOICE_SEARCH: 'voice_search',
+  NOTIFICATIONS: 'notifications'
+} as const;
+
 export interface AppUser {
   id: string;
   name: string;
