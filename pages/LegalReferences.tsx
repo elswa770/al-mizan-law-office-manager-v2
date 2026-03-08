@@ -7,6 +7,15 @@ import { googleDriveService } from '../services/googleDriveService';
 import { Search, Book, Scale, FileText, Library, Filter, Plus, X, Tag, Gavel, Bookmark, ArrowRight, ExternalLink, Sparkles, Loader2, Globe, Calendar, User, Hash, Download, Check, Link as LinkIcon, Upload, FileSearch, AlertTriangle, HardDrive } from 'lucide-react';
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
+import EnhancedSearch from '../components/EnhancedSearch';
+
+// Local SearchSuggestion interface for LegalReferences page
+interface LegalReferencesSearchSuggestion {
+  id: string;
+  text: string;
+  type: 'reference' | 'type' | 'branch' | 'article' | 'year' | 'court' | 'author' | 'tag';
+  metadata?: string;
+}
 
 interface LegalReferencesProps {
   references: LegalReference[];
@@ -19,6 +28,7 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
   const [searchMode, setSearchMode] = useState<'keyword' | 'article'>('keyword');
   const [selectedBranch, setSelectedBranch] = useState<LawBranch | 'all'>('all');
   const [selectedType, setSelectedType] = useState<ReferenceType | 'all'>('all');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   
   // Firebase State
   const [firebaseReferences, setFirebaseReferences] = useState<LegalReference[]>([]);
@@ -98,6 +108,162 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
     );
     return unique;
   }, [references, firebaseReferences]);
+
+  // --- Search Suggestions ---
+  const suggestions = useMemo(() => {
+    const suggestionList: LegalReferencesSearchSuggestion[] = [];
+    
+    // Add reference suggestions
+    allReferences.forEach(ref => {
+      suggestionList.push({
+        id: `reference-${ref.id}`,
+        text: ref.title,
+        type: 'reference',
+        metadata: `${ref.type === 'law' ? 'قانون' : ref.type === 'ruling' ? 'حكم' : ref.type === 'encyclopedia' ? 'موسوعة' : 'لائحة'} - ${ref.branch === 'civil' ? 'مدني' : ref.branch === 'criminal' ? 'جنائي' : ref.branch === 'administrative' ? 'إداري' : ref.branch === 'commercial' ? 'تجاري' : ref.branch === 'family' ? 'أسري' : ref.branch === 'labor' ? 'عمال' : 'أخرى'}`
+      });
+    });
+    
+    // Add type suggestions
+    const types = ['law', 'ruling', 'encyclopedia', 'regulation'] as const;
+    types.forEach(type => {
+      const typeRefs = allReferences.filter(r => r.type === type);
+      if (typeRefs.length > 0) {
+        suggestionList.push({
+          id: `type-${type}`,
+          text: type === 'law' ? 'القوانين' : type === 'ruling' ? 'الأحكام' : type === 'encyclopedia' ? 'الموسوعات' : 'اللوائح',
+          type: 'type',
+          metadata: `${typeRefs.length} مرجع`
+        });
+      }
+    });
+    
+    // Add branch suggestions
+    const branches = ['civil', 'criminal', 'administrative', 'commercial', 'family', 'labor', 'other'] as const;
+    branches.forEach(branch => {
+      const branchRefs = allReferences.filter(r => r.branch === branch);
+      if (branchRefs.length > 0) {
+        suggestionList.push({
+          id: `branch-${branch}`,
+          text: branch === 'civil' ? 'الفرع المدني' : branch === 'criminal' ? 'الفرع الجنائي' : branch === 'administrative' ? 'الفرع الإداري' : branch === 'commercial' ? 'الفرع التجاري' : branch === 'family' ? 'الفرع الأسري' : branch === 'labor' ? 'فرع العمال' : 'فروع أخرى',
+          type: 'branch',
+          metadata: `${branchRefs.length} مرجع`
+        });
+      }
+    });
+    
+    // Add article number suggestions
+    const articlesWithNumbers = allReferences.filter(r => r.articleNumber);
+    articlesWithNumbers.forEach(ref => {
+      if (ref.articleNumber) {
+        suggestionList.push({
+          id: `article-${ref.id}`,
+          text: ref.articleNumber,
+          type: 'article',
+          metadata: ref.title
+        });
+      }
+    });
+    
+    // Add year suggestions
+    const years = [...new Set(allReferences.filter(r => r.year).map(r => r.year!))];
+    years.forEach(year => {
+      const yearRefs = allReferences.filter(r => r.year === year);
+      suggestionList.push({
+        id: `year-${year}`,
+        text: year.toString(),
+        type: 'year',
+        metadata: `${yearRefs.length} مرجع`
+      });
+    });
+    
+    // Add court suggestions
+    const courts = [...new Set(allReferences.filter(r => r.courtName).map(r => r.courtName!))];
+    courts.forEach(court => {
+      const courtRefs = allReferences.filter(r => r.courtName === court);
+      suggestionList.push({
+        id: `court-${court}`,
+        text: court,
+        type: 'court',
+        metadata: `${courtRefs.length} مرجع`
+      });
+    });
+    
+    // Add author suggestions
+    const authors = [...new Set(allReferences.filter(r => r.author).map(r => r.author!))];
+    authors.forEach(author => {
+      const authorRefs = allReferences.filter(r => r.author === author);
+      suggestionList.push({
+        id: `author-${author}`,
+        text: author,
+        type: 'author',
+        metadata: `${authorRefs.length} مرجع`
+      });
+    });
+    
+    // Add tag suggestions
+    const allTags = [...new Set(allReferences.flatMap(r => r.tags || []))];
+    allTags.forEach(tag => {
+      const tagRefs = allReferences.filter(r => r.tags?.includes(tag));
+      suggestionList.push({
+        id: `tag-${tag}`,
+        text: tag,
+        type: 'tag',
+        metadata: `${tagRefs.length} مرجع`
+      });
+    });
+    
+    return suggestionList;
+  }, [allReferences]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query && query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: LegalReferencesSearchSuggestion) => {
+    if (suggestion.type === 'reference') {
+      // Find and scroll to reference
+      const refId = suggestion.id.replace('reference-', '');
+      const refElement = document.getElementById(`reference-${refId}`);
+      if (refElement) {
+        refElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        refElement.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2');
+        setTimeout(() => {
+          refElement.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else if (suggestion.type === 'type') {
+      // Filter by type
+      const type = suggestion.id.replace('type-', '');
+      setSelectedType(type as ReferenceType);
+      setSearchTerm('');
+    } else if (suggestion.type === 'branch') {
+      // Filter by branch
+      const branch = suggestion.id.replace('branch-', '');
+      setSelectedBranch(branch as LawBranch);
+      setSearchTerm('');
+    } else if (suggestion.type === 'article') {
+      // Search by article number
+      setSearchMode('article');
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'year') {
+      // Search by year
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'court') {
+      // Search by court
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'author') {
+      // Search by author
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'tag') {
+      // Search by tag
+      setSearchTerm(suggestion.text);
+    }
+  };
 
   // --- Filtering Logic ---
   const filteredRefs = useMemo(() => {
@@ -618,15 +784,14 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
         {/* Search Bar */}
         <div className="flex flex-col gap-4">
           <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder={searchMode === 'article' ? "ابحث برقم المادة..." : "ابحث باسم القانون، الحكم، أو الكلمات المفتاحية..."}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAiSearch()}
-                className="w-full pr-10 pl-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none text-slate-900 dark:text-white transition-all"
+            <div className="flex-1">
+              <EnhancedSearch
+                onSearch={handleSearch}
+                onSuggestionClick={handleSuggestionClick as any}
+                placeholder={searchMode === 'article' ? "البحث برقم المادة..." : "البحث في المراجع القانونية، القوانين، الأحكام..."}
+                suggestions={suggestions as any}
+                recentSearches={recentSearches}
+                className="w-full"
               />
             </div>
             
@@ -771,7 +936,7 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
       <h3 className="font-bold text-slate-800 dark:text-white text-lg px-2">مراجع المكتبة القانونية</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredRefs.map(ref => (
-          <div key={ref.id} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden hover:shadow-md transition-all group flex flex-col">
+          <div key={ref.id} id={`reference-${ref.id}`} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden hover:shadow-md transition-all group flex flex-col">
             <div className="p-5 flex-1">
               <div className="flex justify-between items-start mb-3">
                 <div className="flex items-center gap-2">

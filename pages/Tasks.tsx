@@ -8,6 +8,15 @@ import {
   Tag, MapPin, Paperclip, Timer, Target, TrendingUp, Users, FileText, Bell
 } from 'lucide-react';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+// Local SearchSuggestion interface for Tasks page
+interface TasksSearchSuggestion {
+  id: string;
+  text: string;
+  type: 'task' | 'case' | 'user' | 'document';
+  metadata?: string;
+}
 
 interface TasksProps {
   tasks: Task[];
@@ -32,6 +41,7 @@ const Tasks: React.FC<TasksProps> = ({
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterUser, setFilterUser] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -59,6 +69,19 @@ const Tasks: React.FC<TasksProps> = ({
     notes: ''
   });
 
+  // --- Helper Functions ---
+  const getUserName = (userId?: string) => {
+    if (!userId) return 'غير محدد';
+    const user = users.find(u => u.id === userId);
+    return user ? user.name : 'مستخدم محذوف';
+  };
+
+  const getCaseName = (caseId?: string) => {
+    if (!caseId) return null;
+    const c = cases.find(x => x.id === caseId);
+    return c ? c.title : null;
+  };
+
   // --- Filtering ---
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
@@ -71,6 +94,81 @@ const Tasks: React.FC<TasksProps> = ({
       return matchesSearch && matchesStatus && matchesUser;
     });
   }, [tasks, searchTerm, filterStatus, filterUser]);
+
+  // --- Search Suggestions ---
+  const suggestions = useMemo(() => {
+    const suggestionList: TasksSearchSuggestion[] = [];
+    
+    // Add task suggestions
+    tasks.forEach(task => {
+      suggestionList.push({
+        id: `task-${task.id}`,
+        text: task.title,
+        type: 'task',
+        metadata: `${task.priority === 'high' ? 'عاجل' : task.priority === 'medium' ? 'متوسط' : 'عادي'} - ${task.dueDate} - ${getUserName(task.assignedTo)}`
+      });
+    });
+    
+    // Add case suggestions for related tasks
+    cases.forEach(c => {
+      const relatedTasks = tasks.filter(t => t.relatedCaseId === c.id);
+      if (relatedTasks.length > 0) {
+        suggestionList.push({
+          id: `case-${c.id}`,
+          text: `${c.caseNumber} / ${c.year} - ${c.title}`,
+          type: 'case',
+          metadata: `${relatedTasks.length} مهمة مرتبطة - ${c.court}`
+        });
+      }
+    });
+    
+    // Add user suggestions
+    users.forEach(user => {
+      const userTasks = tasks.filter(t => t.assignedTo === user.id);
+      if (userTasks.length > 0) {
+        suggestionList.push({
+          id: `user-${user.id}`,
+          text: user.name,
+          type: 'user',
+          metadata: `${userTasks.length} مهمة مكلفة - ${user.roleLabel || 'موظف'}`
+        });
+      }
+    });
+    
+    return suggestionList;
+  }, [tasks, cases, users]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: TasksSearchSuggestion) => {
+    if (suggestion.type === 'task') {
+      // Find and scroll to task (or highlight it)
+      const taskId = suggestion.id.replace('task-', '');
+      const taskElement = document.getElementById(`task-${taskId}`);
+      if (taskElement) {
+        taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        taskElement.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2');
+        setTimeout(() => {
+          taskElement.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else if (suggestion.type === 'case') {
+      const caseId = suggestion.id.replace('case-', '');
+      onCaseClick(caseId);
+    } else if (suggestion.type === 'user') {
+      // Filter by user
+      const userId = suggestion.id.replace('user-', '');
+      setFilterUser(userId);
+      setSearchTerm('');
+    }
+  };
 
   // --- Stats ---
   const stats = useMemo(() => {
@@ -133,194 +231,188 @@ const Tasks: React.FC<TasksProps> = ({
     }
   };
 
-  const getUserName = (userId?: string) => {
-    if (!userId) return 'غير محدد';
-    const user = users.find(u => u.id === userId);
-    return user ? user.name : 'مستخدم محذوف';
-  };
-
-  const getCaseName = (caseId?: string) => {
-    if (!caseId) return null;
-    const c = cases.find(x => x.id === caseId);
-    return c ? c.title : null;
-  };
-
   // --- Render Functions ---
 
   const renderTaskCard = (task: Task) => (
-    <div key={task.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group relative">
-      {/* Header with Priority and Actions */}
-      <div className="flex justify-between items-start mb-3">
-        <div className="flex items-center gap-2">
-          <span className={`text-[10px] px-2 py-0.5 rounded border font-bold ${getPriorityColor(task.priority)}`}>
-            {task.priority === 'high' ? 'عاجل' : task.priority === 'medium' ? 'متوسط' : 'عادي'}
-          </span>
-          
-          {/* Category Badge */}
-          {task.category && (
-            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
-              {task.category === 'legal' ? 'قانوني' : 
-               task.category === 'administrative' ? 'إداري' :
-               task.category === 'research' ? 'بحث' :
-               task.category === 'meeting' ? 'اجتماع' : 'أخرى'}
+    <div key={task.id} id={`task-${task.id}`} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg transition-all duration-300 group relative overflow-hidden">
+      {/* Status Indicator Bar */}
+      <div className={`h-1 w-full ${
+        task.status === 'completed' ? 'bg-green-500' :
+        task.status === 'in_progress' ? 'bg-blue-500' : 'bg-slate-400'
+      }`}></div>
+      
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex justify-between items-start mb-4">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Priority Badge */}
+            <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${getPriorityColor(task.priority)}`}>
+              {task.priority === 'high' ? 'عاجل' : task.priority === 'medium' ? 'متوسط' : 'عادي'}
             </span>
-          )}
-        </div>
-        
-        {!readOnly && (
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-            <button onClick={() => handleOpenModal(task)} className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400">
-              <Edit3 className="w-3.5 h-3.5" />
-            </button>
-            <button onClick={() => onDeleteTask(task.id)} className="p-1 text-slate-400 hover:text-red-600 dark:hover:text-red-400">
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
-      </div>
-      
-      {/* Title and Description */}
-      <h4 className="font-bold text-slate-800 dark:text-white mb-2 line-clamp-2">{task.title}</h4>
-      {task.description && <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-3">{task.description}</p>}
-      
-      {/* Tags */}
-      {task.tags && task.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {task.tags.map((tag, index) => (
-            <span key={index} className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-full">
-              #{tag}
-            </span>
-          ))}
-        </div>
-      )}
-      
-      {/* Progress Bar */}
-      {task.progress !== undefined && task.progress > 0 && (
-        <div className="mb-3">
-          <div className="flex justify-between items-center mb-1">
-            <span className="text-xs text-slate-500 dark:text-slate-400">نسبة الإنجاز</span>
-            <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{task.progress}%</span>
-          </div>
-          <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2">
-            <div 
-              className="bg-green-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${task.progress}%` }}
-            />
-          </div>
-        </div>
-      )}
-      
-      {/* Task Details Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-        {/* Due Date and Reminder */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-            <Calendar className="w-3 h-3" />
-            <span>تاريخ الاستحقاق: {task.dueDate}</span>
-          </div>
-          
-          {task.reminderDate && (
-            <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400">
-              <Bell className="w-3 h-3" />
-              <span>تذكير: {new Date(task.reminderDate).toLocaleString('ar-EG')}</span>
-            </div>
-          )}
-        </div>
-        
-        {/* Location and Time */}
-        <div className="space-y-2">
-          {task.location && (
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <MapPin className="w-3 h-3" />
-              <span>المكان: {task.location}</span>
-            </div>
-          )}
-          
-          {(task.estimatedHours || task.actualHours) && (
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <Timer className="w-3 h-3" />
-              <span>
-                التقديري: {task.estimatedHours || '-'}س | 
-                الفعلي: {task.actualHours || '-'}س
-              </span>
-            </div>
-          )}
-        </div>
-        
-        {/* Case Assignment */}
-        {task.relatedCaseId && (
-          <div className="flex items-center gap-2 text-xs text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline" onClick={() => onCaseClick(task.relatedCaseId!)}>
-            <Briefcase className="w-3 h-3" />
-            <span className="truncate max-w-[150px]">{getCaseName(task.relatedCaseId)}</span>
-          </div>
-        )}
-        
-        {/* User Assignment */}
-        {task.assignedTo && (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">
-              <User className="w-3 h-3" />
-              <span>{getUserName(task.assignedTo)}</span>
-            </div>
             
-            {/* Status Selector */}
-            {!readOnly && (
+            {/* Category Badge */}
+            {task.category && (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
+                {task.category === 'legal' ? 'قانوني' : 
+                 task.category === 'administrative' ? 'إداري' :
+                 task.category === 'research' ? 'بحث' :
+                 task.category === 'meeting' ? 'اجتماع' : 'أخرى'}
+              </span>
+            )}
+          </div>
+          
+          {/* Actions */}
+          {!readOnly && (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+              <button onClick={() => handleOpenModal(task)} className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors">
+                <Edit3 className="w-4 h-4" />
+              </button>
+              <button onClick={() => onDeleteTask(task.id)} className="p-1.5 text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+        
+        {/* Title */}
+        <h4 className="font-bold text-lg text-slate-800 dark:text-white mb-2 line-clamp-2 leading-tight">{task.title}</h4>
+        
+        {/* Description */}
+        {task.description && (
+          <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 mb-4 leading-relaxed">{task.description}</p>
+        )}
+        
+        {/* Tags */}
+        {task.tags && task.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {task.tags.map((tag, index) => (
+              <span key={index} className="text-xs px-2 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-md border border-blue-100 dark:border-blue-800">
+                #{tag}
+              </span>
+            ))}
+          </div>
+        )}
+        
+        {/* Progress Bar */}
+        {task.progress !== undefined && task.progress > 0 && (
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">نسبة الإنجاز</span>
+              <span className="text-sm font-bold text-green-600 dark:text-green-400">{task.progress}%</span>
+            </div>
+            <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5">
+              <div 
+                className="bg-gradient-to-r from-green-400 to-green-600 h-2.5 rounded-full transition-all duration-500 shadow-sm"
+                style={{ width: `${task.progress}%` }}
+              />
+            </div>
+          </div>
+        )}
+        
+        {/* Key Information Grid */}
+        <div className="grid grid-cols-1 gap-3 mb-4">
+          {/* Due Date */}
+          <div className="flex items-center gap-3 p-3 bg-amber-50 dark:bg-amber-900/10 rounded-lg border border-amber-100 dark:border-amber-800/50">
+            <Calendar className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+            <div className="flex-1">
+              <span className="text-xs font-medium text-amber-700 dark:text-amber-300">تاريخ الاستحقاق</span>
+              <p className="text-sm font-bold text-amber-800 dark:text-amber-200">{task.dueDate}</p>
+            </div>
+          </div>
+          
+          {/* Assigned User */}
+          {task.assignedTo && (
+            <div className="flex items-center gap-3 p-3 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg border border-indigo-100 dark:border-indigo-800/50">
+              <User className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <div className="flex-1">
+                <span className="text-xs font-medium text-indigo-700 dark:text-indigo-300">المكلف به</span>
+                <p className="text-sm font-bold text-indigo-800 dark:text-indigo-200">{getUserName(task.assignedTo)}</p>
+              </div>
+            </div>
+          )}
+          
+          {/* Related Case */}
+          {task.relatedCaseId && (
+            <div className="flex items-center gap-3 p-3 bg-purple-50 dark:bg-purple-900/10 rounded-lg border border-purple-100 dark:border-purple-800/50">
+              <Briefcase className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <div className="flex-1">
+                <span className="text-xs font-medium text-purple-700 dark:text-purple-300">القضية المرتبطة</span>
+                <button 
+                  onClick={() => onCaseClick(task.relatedCaseId!)}
+                  className="text-sm font-bold text-purple-800 dark:text-purple-200 hover:underline text-right line-clamp-1"
+                >
+                  {getCaseName(task.relatedCaseId)}
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* Location */}
+          {task.location && (
+            <div className="flex items-center gap-3 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg border border-slate-100 dark:border-slate-600">
+              <MapPin className="w-4 h-4 text-slate-600 dark:text-slate-400" />
+              <div className="flex-1">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">المكان</span>
+                <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{task.location}</p>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Additional Info */}
+        <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 border-t border-slate-100 dark:border-slate-700 pt-3">
+          <div className="flex items-center gap-4">
+            {(task.estimatedHours || task.actualHours) && (
+              <div className="flex items-center gap-1">
+                <Timer className="w-3 h-3" />
+                <span>تقديري: {task.estimatedHours || '-'}س | فعلي: {task.actualHours || '-'}س</span>
+              </div>
+            )}
+            {task.reminderDate && (
+              <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <Bell className="w-3 h-3" />
+                <span>تذكير</span>
+              </div>
+            )}
+          </div>
+          
+          {task.attachments && task.attachments.length > 0 && (
+            <div className="flex items-center gap-1">
+              <Paperclip className="w-3 h-3" />
+              <span>{task.attachments.length} مرفق</span>
+            </div>
+          )}
+        </div>
+        
+        {/* Completion Date */}
+        {task.completedAt && (
+          <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
+            <div className="flex items-center gap-2 text-green-700 dark:text-green-300">
+              <CheckCircle className="w-4 h-4" />
+              <span className="text-xs font-medium">تم الإنجاز: {new Date(task.completedAt).toLocaleDateString('ar-EG')}</span>
+            </div>
+          </div>
+        )}
+        
+        {/* Status Selector - Separate Section */}
+        {!readOnly && (
+          <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-600 dark:text-slate-400">حالة المهمة:</span>
               <select 
-                className="text-[10px] bg-transparent border border-slate-200 dark:border-slate-600 rounded p-1 outline-none cursor-pointer"
+                className="text-sm bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 outline-none cursor-pointer font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 value={task.status}
                 onChange={(e) => handleChangeStatus(task.id, e.target.value as any)}
+                title="تغيير حالة المهمة"
               >
                 <option value="pending">قيد الانتظار</option>
                 <option value="in_progress">جاري التنفيذ</option>
                 <option value="completed">مكتمل</option>
               </select>
-            )}
+            </div>
           </div>
         )}
       </div>
-      
-      {/* Additional Notes */}
-      {task.notes && (
-        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            <span className="font-medium">ملاحظات:</span> {task.notes}
-          </div>
-        </div>
-      )}
-      
-      {/* Attachments */}
-      {task.attachments && task.attachments.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-          <div className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-1">
-            <Paperclip className="w-3 h-3" />
-            المرفقات ({task.attachments.length})
-          </div>
-          <div className="space-y-1">
-            {task.attachments.map((attachment, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <Paperclip className="w-3 h-3 text-slate-400" />
-                <a 
-                  href={attachment} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate"
-                  title={attachment}
-                >
-                  {attachment.split('/').pop() || attachment}
-                </a>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      
-      {/* Completion Date */}
-      {task.completedAt && (
-        <div className="mt-2 text-xs text-green-600 dark:text-green-400">
-          <CheckCircle className="w-3 h-3 inline ml-1" />
-          تم الإنجاز: {new Date(task.completedAt).toLocaleString('ar-EG')}
-        </div>
-      )}
     </div>
   );
 
@@ -480,16 +572,15 @@ const Tasks: React.FC<TasksProps> = ({
 
       {/* 2. Filters & View Toggle */}
       <div className="flex flex-col md:flex-row gap-4">
-         <div className="flex-1 relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input 
-               type="text" 
-               placeholder="بحث في المهام..." 
-               value={searchTerm}
-               onChange={(e) => setSearchTerm(e.target.value)}
-               className="w-full pr-9 pl-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:border-primary-500 text-slate-900 dark:text-white"
-            />
-         </div>
+         {/* Enhanced Search Bar */}
+         <EnhancedSearch
+           onSearch={handleSearch}
+           onSuggestionClick={handleSuggestionClick as any}
+           placeholder="البحث في المهام، القضايا، الموظفين..."
+           suggestions={suggestions as any}
+           recentSearches={recentSearches}
+           className="flex-1"
+         />
          
          <div className="flex gap-2 overflow-x-auto">
             <div className="flex items-center gap-2 bg-white dark:bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700">

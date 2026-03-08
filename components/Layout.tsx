@@ -4,6 +4,7 @@ import { LayoutDashboard, Briefcase, Users, Gavel, FileText, BrainCircuit, LogOu
 import { AppUser } from '../types';
 import { AuthUser } from '../services/authService';
 import OfflineStatus from './OfflineStatus';
+import MobileNavigation from './MobileNavigation';
 
 interface NotificationItem {
   id: string;
@@ -312,29 +313,14 @@ const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notif
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex flex-col md:flex-row overflow-hidden transition-colors duration-300">
       
-      {/* --- Mobile Header --- */}
-      <div className="md:hidden bg-white dark:bg-slate-900 p-4 flex justify-between items-center shadow-sm border-b border-slate-200 dark:border-slate-800 z-50">
-        <h1 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
-          <Gavel className="w-6 h-6 text-primary-600" />
-          الميزان
-        </h1>
-        <div className="flex items-center gap-4">
-          <button 
-            className="relative text-slate-600 dark:text-slate-300"
-            onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-          >
-             <Bell className="w-6 h-6" />
-             {notifications.length > 0 && (
-               <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 flex items-center justify-center rounded-full font-bold">
-                 {notifications.length}
-               </span>
-             )}
-          </button>
-          <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
-            <Menu className="w-6 h-6 text-slate-600 dark:text-slate-300" />
-          </button>
-        </div>
-      </div>
+      {/* Mobile Navigation Component */}
+      <MobileNavigation 
+        activePage={activePage}
+        onNavigate={onNavigate}
+        currentUser={currentUser}
+        notificationsCount={notifications.length}
+        onLogout={onLogout}
+      />
 
       {/* --- Sidebar (Desktop & Mobile) --- */}
       <aside className={`
@@ -484,7 +470,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notif
               )}
               
               {!isSidebarCollapsed && (
-                 <button onClick={onLogout} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-700/50 rounded-lg transition-colors" title="تسجيل الخروج">
+                 <button onClick={onLogout} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-700/50 rounded-lg transition-colors" aria-label="تسجيل الخروج" title="تسجيل الخروج">
                     <LogOut className="w-4 h-4" />
                  </button>
               )}
@@ -554,7 +540,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notif
               >
                   <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
                       <h3 className="font-bold text-slate-800 dark:text-white text-sm">التنبيهات</h3>
-                      <button onClick={() => setIsNotificationsOpen(false)}>
+                      <button onClick={() => setIsNotificationsOpen(false)} aria-label="إغلاق التنبيهات">
                         <X className="w-5 h-5 text-slate-400" />
                       </button>
                    </div>

@@ -3,6 +3,15 @@ import { Case, Client, CaseDocument, ClientDocument, CaseRuling } from '../types
 import { FileText, Search, Filter, FolderOpen, User, Briefcase, File, Gavel, FileCheck, Shield, Download, Eye, ExternalLink, Calendar, Grid, List, Building2, Upload, X, Check, Cloud, Plus, Trash2 } from 'lucide-react';
 import CloudDocumentUpload from '../components/CloudDocumentUpload';
 import { googleDriveService } from '../services/googleDriveService';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+// Local SearchSuggestion interface for Documents page
+interface DocumentsSearchSuggestion {
+  id: string;
+  text: string;
+  type: 'document' | 'category' | 'type' | 'case' | 'client' | 'date';
+  metadata?: string;
+}
 
 interface DocumentsProps {
   cases: Case[];
@@ -35,6 +44,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [sourceFilter, setSourceFilter] = useState<'all' | 'case' | 'client'>('all');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   // --- Upload Modal State ---
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
@@ -182,6 +192,133 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
 
     return docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [cases, clients]);
+
+  // --- Search Suggestions ---
+  const suggestions = useMemo(() => {
+    const suggestionList: DocumentsSearchSuggestion[] = [];
+    
+    // Add document suggestions
+    allDocuments.forEach(doc => {
+      suggestionList.push({
+        id: `document-${doc.uniqueKey}`,
+        text: doc.title,
+        type: 'document',
+        metadata: `${doc.categoryLabel} - ${doc.sourceName} - ${doc.date}`
+      });
+    });
+    
+    // Add category suggestions
+    const categories = ['legal', 'admin', 'evidence', 'ruling', 'contract', 'other'] as const;
+    categories.forEach(category => {
+      const categoryDocs = allDocuments.filter(d => d.category === category);
+      if (categoryDocs.length > 0) {
+        const categoryLabel = categoryDocs[0].categoryLabel;
+        suggestionList.push({
+          id: `category-${category}`,
+          text: categoryLabel,
+          type: 'category',
+          metadata: `${categoryDocs.length} مستند`
+        });
+      }
+    });
+    
+    // Add type suggestions
+    const types = [...new Set(allDocuments.map(d => d.type))];
+    types.forEach(type => {
+      const typeDocs = allDocuments.filter(d => d.type === type);
+      suggestionList.push({
+        id: `type-${type}`,
+        text: type,
+        type: 'type',
+        metadata: `${typeDocs.length} مستند`
+      });
+    });
+    
+    // Add case suggestions
+    cases.forEach(c => {
+      const caseDocs = allDocuments.filter(d => d.sourceType === 'case' && d.sourceId === c.id);
+      if (caseDocs.length > 0) {
+        suggestionList.push({
+          id: `case-${c.id}`,
+          text: `${c.caseNumber} / ${c.year} - ${c.title}`,
+          type: 'case',
+          metadata: `${caseDocs.length} مستند قضية`
+        });
+      }
+    });
+    
+    // Add client suggestions
+    clients.forEach(client => {
+      const clientDocs = allDocuments.filter(d => d.sourceType === 'client' && d.sourceId === client.id);
+      if (clientDocs.length > 0) {
+        suggestionList.push({
+          id: `client-${client.id}`,
+          text: client.name,
+          type: 'client',
+          metadata: `${clientDocs.length} مستند موكل`
+        });
+      }
+    });
+    
+    // Add date suggestions
+    const dates = [...new Set(allDocuments.map(d => d.date))];
+    dates.forEach(date => {
+      const dateDocs = allDocuments.filter(d => d.date === date);
+      suggestionList.push({
+        id: `date-${date}`,
+        text: date,
+        type: 'date',
+        metadata: `${dateDocs.length} مستند`
+      });
+    });
+    
+    return suggestionList;
+  }, [allDocuments, cases, clients]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query && query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: DocumentsSearchSuggestion) => {
+    if (suggestion.type === 'document') {
+      // Find and scroll to document
+      const docKey = suggestion.id.replace('document-', '');
+      const docElement = document.getElementById(`document-${docKey}`);
+      if (docElement) {
+        docElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        docElement.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2');
+        setTimeout(() => {
+          docElement.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else if (suggestion.type === 'category') {
+      // Filter by category
+      const category = suggestion.id.replace('category-', '');
+      setActiveCategory(category);
+      setSearchTerm('');
+    } else if (suggestion.type === 'type') {
+      // Search by file type
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'case') {
+      // Filter by case
+      const caseId = suggestion.id.replace('case-', '');
+      setSourceFilter('case');
+      setSearchTerm(cases.find(c => c.id === caseId)?.title || '');
+    } else if (suggestion.type === 'client') {
+      // Filter by client
+      const clientId = suggestion.id.replace('client-', '');
+      setSourceFilter('client');
+      setSearchTerm(clients.find(c => c.id === clientId)?.name || '');
+    } else if (suggestion.type === 'date') {
+      // Search by date
+      setSearchTerm(suggestion.text);
+    }
+  };
 
   // --- 2. Filtering Logic ---
   const filteredDocs = allDocuments.filter(doc => {
@@ -394,14 +531,14 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
          {/* Top Bar */}
          <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-50 dark:bg-slate-800">
             <div className="relative w-full sm:w-96">
-               <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-               <input 
-                 type="text" 
-                 placeholder="بحث باسم المستند، الموكل، أو القضية..." 
-                 value={searchTerm}
-                 onChange={(e) => setSearchTerm(e.target.value)}
-                 className="w-full pr-10 pl-4 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:border-primary-500 text-slate-900 dark:text-white"
-               />
+              <EnhancedSearch
+                onSearch={handleSearch}
+                onSuggestionClick={handleSuggestionClick as any}
+                placeholder="البحث في المستندات، القضايا، الموكلين..."
+                suggestions={suggestions as any}
+                recentSearches={recentSearches}
+                className="w-full"
+              />
             </div>
             
             <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -442,7 +579,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                viewMode === 'grid' ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                      {filteredDocs.map(doc => (
-                        <div key={doc.uniqueKey} className="group bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all relative">
+                        <div key={doc.uniqueKey} id={`document-${doc.uniqueKey}`} className="group bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all relative">
                            {doc.isOriginal && (
                               <div className="absolute top-2 left-2 text-[10px] bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800 font-bold z-10">
                                  أصل

@@ -129,16 +129,20 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
 
   useEffect(() => {
     // Show browser notifications for critical cases
-    if (generalSettings?.enableSystemNotifications && criticalCases.length > 0) {
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification('تنبيه من الميزان - لوحة التحكم', {
-          body: `يوجد ${criticalCases.length} قضية تحتاج انتباهك (بدون جلسات قادمة)`,
-          icon: '/icon-192x192.png',
-          tag: 'dashboard-critical-cases',
-          requireInteraction: true,
-          silent: false
-        });
+    try {
+      if (generalSettings?.enableSystemNotifications && criticalCases.length > 0) {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('تنبيه من الميزان - لوحة التحكم', {
+            body: `يوجد ${criticalCases.length} قضية تحتاج انتباهك (بدون جلسات قادمة)`,
+            icon: '/icon-192x192.png',
+            tag: 'dashboard-critical-cases',
+            requireInteraction: true,
+            silent: false
+          });
+        }
       }
+    } catch (error) {
+      console.warn('Failed to show notification:', error);
     }
   }, [criticalCases, generalSettings?.enableSystemNotifications]);
 

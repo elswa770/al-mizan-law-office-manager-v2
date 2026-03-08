@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { WorkLocation } from '../types';
 import { MapPin, Search, Plus, Filter, Navigation, Phone, Info, Building2, Shield, FileSignature, X, Save, Edit3, Trash2, Map } from 'lucide-react';
 import { 
@@ -8,6 +8,15 @@ import {
   updateLocation, 
   deleteLocation 
 } from '../services/dbService';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+// Local SearchSuggestion interface for Locations page
+interface LocationsSearchSuggestion {
+  id: string;
+  text: string;
+  type: 'location' | 'type' | 'governorate' | 'address' | 'phone';
+  metadata?: string;
+}
 
 interface LocationsProps {
   readOnly?: boolean;
@@ -18,6 +27,7 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<Partial<WorkLocation>>({
     name: '', type: 'court', address: '', governorate: 'القاهرة'
@@ -39,12 +49,134 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
 
     loadLocations();
   }, []);
-  const filteredLocations = locations.filter(loc => {
-    const matchesSearch = loc.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          loc.address.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType === 'all' || loc.type === filterType;
-    return matchesSearch && matchesType;
-  });
+
+  // --- Search Suggestions ---
+  const suggestions = useMemo(() => {
+    const suggestionList: LocationsSearchSuggestion[] = [];
+    
+    // Add location suggestions
+    locations.forEach(location => {
+      suggestionList.push({
+        id: `location-${location.id}`,
+        text: location.name,
+        type: 'location',
+        metadata: `${location.type === 'court' ? 'محكمة' : location.type === 'police_station' ? 'قسم شرطة' : location.type === 'notary' ? 'كاتب عدل' : location.type === 'expert' ? 'خبير' : 'أخرى'} - ${location.governorate}`
+      });
+    });
+    
+    // Add type suggestions
+    const types = ['court', 'police_station', 'notary', 'expert', 'other'] as const;
+    types.forEach(type => {
+      const typeLocations = locations.filter(l => l.type === type);
+      if (typeLocations.length > 0) {
+        suggestionList.push({
+          id: `type-${type}`,
+          text: type === 'court' ? 'محاكم' : type === 'police_station' ? 'أقسام الشرطة' : type === 'notary' ? 'كتاب العدل' : type === 'expert' ? 'الخبراء' : 'أخرى',
+          type: 'type',
+          metadata: `${typeLocations.length} موقع`
+        });
+      }
+    });
+    
+    // Add governorate suggestions
+    const governorates = [...new Set(locations.map(l => l.governorate))];
+    governorates.forEach(governorate => {
+      const governorateLocations = locations.filter(l => l.governorate === governorate);
+      suggestionList.push({
+        id: `governorate-${governorate}`,
+        text: governorate,
+        type: 'governorate',
+        metadata: `${governorateLocations.length} موقع`
+      });
+    });
+    
+    // Add address suggestions
+    locations.forEach(location => {
+      if (location.address) {
+        suggestionList.push({
+          id: `address-${location.id}`,
+          text: location.address,
+          type: 'address',
+          metadata: location.name
+        });
+      }
+    });
+    
+    // Add phone suggestions
+    locations.forEach(location => {
+      if (location.phone) {
+        suggestionList.push({
+          id: `phone-${location.id}`,
+          text: location.phone,
+          type: 'phone',
+          metadata: location.name
+        });
+      }
+    });
+    
+    return suggestionList;
+  }, [locations]);
+
+  const handleSearch = (query: string) => {
+    // Ensure search term is properly handled
+    setSearchTerm(query || '');
+    
+    // Add to recent searches only if query is not empty and not already in list
+    if (query && query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: LocationsSearchSuggestion) => {
+    if (suggestion.type === 'location') {
+      // Find and scroll to location
+      const locationId = suggestion.id.replace('location-', '');
+      const locationElement = document.getElementById(`location-${locationId}`);
+      if (locationElement) {
+        locationElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        locationElement.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2');
+        setTimeout(() => {
+          locationElement.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else if (suggestion.type === 'type') {
+      // Filter by type
+      const type = suggestion.id.replace('type-', '');
+      setFilterType(type);
+      setSearchTerm('');
+    } else if (suggestion.type === 'governorate') {
+      // Filter by governorate
+      const governorate = suggestion.id.replace('governorate-', '');
+      setSearchTerm(governorate);
+    } else if (suggestion.type === 'address') {
+      // Search by address
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'phone') {
+      // Search by phone
+      setSearchTerm(suggestion.text);
+    }
+  };
+
+  const filteredLocations = useMemo(() => {
+    return locations.filter(loc => {
+      // Handle empty search term - show all locations
+      if (!searchTerm || searchTerm.trim() === '') {
+        return filterType === 'all' || loc.type === filterType;
+      }
+      
+      // Apply search filters when search term is present
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = 
+        loc.name.toLowerCase().includes(searchLower) || 
+        loc.address.toLowerCase().includes(searchLower) ||
+        loc.governorate.toLowerCase().includes(searchLower) ||
+        loc.phone?.includes(searchTerm) ||
+        loc.notes?.toLowerCase().includes(searchLower);
+      
+      const matchesType = filterType === 'all' || loc.type === filterType;
+      return matchesSearch && matchesType;
+    });
+  }, [locations, searchTerm, filterType]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,15 +274,15 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
 
        {/* Filters */}
        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-             <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-             <input 
-               type="text" 
-               placeholder="بحث باسم المحكمة، القسم، أو المنطقة..." 
-               value={searchTerm}
-               onChange={(e) => setSearchTerm(e.target.value)}
-               className="w-full pr-10 pl-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary-500 text-slate-900 dark:text-white"
-             />
+          <div className="flex-1">
+            <EnhancedSearch
+              onSearch={handleSearch}
+              onSuggestionClick={handleSuggestionClick as any}
+              placeholder="البحث في المحاكم، الأقسام، العناوين، المحافظات..."
+              suggestions={suggestions as any}
+              recentSearches={recentSearches}
+              className="w-full"
+            />
           </div>
           <div className="flex items-center gap-2 overflow-x-auto pb-2 md:pb-0">
              <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
@@ -173,7 +305,7 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
        {/* Grid */}
        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredLocations.map(loc => (
-             <div key={loc.id} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group overflow-hidden flex flex-col">
+             <div key={loc.id} id={`location-${loc.id}`} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group overflow-hidden flex flex-col">
                 <div className="p-5 flex-1">
                    <div className="flex justify-between items-start mb-3">
                       <div className="p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">

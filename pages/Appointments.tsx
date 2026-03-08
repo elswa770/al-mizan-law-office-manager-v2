@@ -13,6 +13,15 @@ import MonthlyCalendar from '../components/MonthlyCalendar';
 import notificationService from '../services/notificationService';
 import calendarSyncService from '../services/calendarSyncService';
 import RecurrenceManager from '../components/RecurrenceManager';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+// Local SearchSuggestion interface for Appointments page
+interface AppointmentsSearchSuggestion {
+  id: string;
+  text: string;
+  type: 'appointment' | 'case' | 'client' | 'user' | 'date';
+  metadata?: string;
+}
 
 // --- Types ---
 export interface AppointmentStats {
@@ -65,6 +74,7 @@ const Appointments: React.FC<AppointmentsProps> = ({
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   
   // Initialize with today's date
   const today = new Date();
@@ -72,6 +82,25 @@ const Appointments: React.FC<AppointmentsProps> = ({
   const todayString = today.getFullYear() + '-' + 
     String(today.getMonth() + 1).padStart(2, '0') + '-' + 
     String(today.getDate()).padStart(2, '0');
+  
+  // --- Helper Functions ---
+  const getUserName = (userId?: string) => {
+    if (!userId) return 'غير محدد';
+    const user = users.find(u => u.id === userId);
+    return user ? user.name : 'مستخدم محذوف';
+  };
+
+  const getClientName = (clientId?: string) => {
+    if (!clientId) return 'غير محدد';
+    const client = clients.find(c => c.id === clientId);
+    return client ? client.name : 'موكل محذوف';
+  };
+
+  const getCaseName = (caseId?: string) => {
+    if (!caseId) return null;
+    const c = cases.find(x => x.id === caseId);
+    return c ? c.title : null;
+  };
   
   const [selectedDate, setSelectedDate] = useState(today);
   const [selectedDateString, setSelectedDateString] = useState(todayString);
@@ -122,6 +151,113 @@ const Appointments: React.FC<AppointmentsProps> = ({
     
     return filtered;
   }, [appointments, searchTerm, filterType, filterStatus, forceUpdate, refreshKey, selectedDateString]);
+
+  // --- Search Suggestions ---
+  const suggestions = useMemo(() => {
+    const suggestionList: AppointmentsSearchSuggestion[] = [];
+    
+    // Add appointment suggestions
+    appointments.forEach(appointment => {
+      suggestionList.push({
+        id: `appointment-${appointment.id}`,
+        text: appointment.title,
+        type: 'appointment',
+        metadata: `${appointment.date} - ${appointment.startTime} - ${appointment.type === 'client' ? 'موكل' : appointment.type === 'meeting' ? 'اجتماع' : appointment.type === 'court' ? 'جلسة' : appointment.type === 'video_call' ? 'مكالمة فيديو' : appointment.type === 'phone_call' ? 'مكالمة هاتفية' : appointment.type === 'internal' ? 'داخلي' : 'أخرى'}`
+      });
+    });
+    
+    // Add case suggestions for related appointments
+    cases.forEach(c => {
+      const relatedAppointments = appointments.filter(a => a.relatedCaseId === c.id);
+      if (relatedAppointments.length > 0) {
+        suggestionList.push({
+          id: `case-${c.id}`,
+          text: `${c.caseNumber} / ${c.year} - ${c.title}`,
+          type: 'case',
+          metadata: `${relatedAppointments.length} موعد مرتبط - ${c.court}`
+        });
+      }
+    });
+    
+    // Add client suggestions for related appointments
+    clients.forEach(client => {
+      const clientAppointments = appointments.filter(a => a.relatedClientId === client.id);
+      if (clientAppointments.length > 0) {
+        suggestionList.push({
+          id: `client-${client.id}`,
+          text: client.name,
+          type: 'client',
+          metadata: `${clientAppointments.length} موعد مرتبط - ${client.type === 'individual' ? 'فردي' : 'شركة'}`
+        });
+      }
+    });
+    
+    // Add user suggestions for attendees
+    users.forEach(user => {
+      const userAppointments = appointments.filter(a => a.attendees?.includes(user.id));
+      if (userAppointments.length > 0) {
+        suggestionList.push({
+          id: `user-${user.id}`,
+          text: user.name,
+          type: 'user',
+          metadata: `${userAppointments.length} موعد مشارك - ${user.roleLabel || 'موظف'}`
+        });
+      }
+    });
+    
+    // Add date suggestions
+    const uniqueDates = [...new Set(appointments.map(a => a.date))];
+    uniqueDates.forEach(date => {
+      const dateAppointments = appointments.filter(a => a.date === date);
+      suggestionList.push({
+        id: `date-${date}`,
+        text: date,
+        type: 'date',
+        metadata: `${dateAppointments.length} موعد في هذا التاريخ`
+      });
+    });
+    
+    return suggestionList;
+  }, [appointments, cases, clients, users]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: AppointmentsSearchSuggestion) => {
+    if (suggestion.type === 'appointment') {
+      // Find and scroll to appointment
+      const appointmentId = suggestion.id.replace('appointment-', '');
+      const appointmentElement = document.getElementById(`appointment-${appointmentId}`);
+      if (appointmentElement) {
+        appointmentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        appointmentElement.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2');
+        setTimeout(() => {
+          appointmentElement.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else if (suggestion.type === 'case') {
+      const caseId = suggestion.id.replace('case-', '');
+      onCaseClick?.(caseId);
+    } else if (suggestion.type === 'client') {
+      // Filter by client
+      const clientId = suggestion.id.replace('client-', '');
+      setSearchTerm(getClientName(clientId));
+    } else if (suggestion.type === 'user') {
+      // Filter by user
+      const userId = suggestion.id.replace('user-', '');
+      setSearchTerm(getUserName(userId));
+    } else if (suggestion.type === 'date') {
+      // Filter by date
+      const date = suggestion.id.replace('date-', '');
+      setSearchTerm(date);
+    }
+  };
 
   // --- Stats ---
   const stats = useMemo((): AppointmentStats => {
@@ -481,27 +617,9 @@ const Appointments: React.FC<AppointmentsProps> = ({
     }
   };
 
-  const getUserName = (userId?: string) => {
-    if (!userId) return 'غير محدد';
-    const user = users.find(u => u.id === userId);
-    return user ? user.name : 'مستخدم محذوف';
-  };
-
-  const getCaseName = (caseId?: string) => {
-    if (!caseId) return null;
-    const case_ = cases.find(c => c.id === caseId);
-    return case_ ? case_.title : null;
-  };
-
-  const getClientName = (clientId?: string) => {
-    if (!clientId) return null;
-    const client = clients.find(c => c.id === clientId);
-    return client ? client.name : null;
-  };
-
   // --- Render Functions ---
   const renderAppointmentCard = (appointment: Appointment) => (
-    <div key={appointment.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group relative">
+    <div key={appointment.id} id={`appointment-${appointment.id}`} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all group relative">
       {/* Header */}
       <div className="flex justify-between items-start mb-3">
         <div className="flex items-center gap-2">
@@ -1141,16 +1259,14 @@ const Appointments: React.FC<AppointmentsProps> = ({
       <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
         <div className="flex flex-col md:flex-row gap-4">
           <div className="flex-1">
-            <div className="relative">
-              <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="بحث في المواعيد..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pr-10 pl-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 dark:text-white"
-              />
-            </div>
+            <EnhancedSearch
+              onSearch={handleSearch}
+              onSuggestionClick={handleSuggestionClick as any}
+              placeholder="البحث في المواعيد، القضايا، الموكلين، الموظفين..."
+              suggestions={suggestions as any}
+              recentSearches={recentSearches}
+              className="flex-1"
+            />
           </div>
           
           <div className="flex gap-2">

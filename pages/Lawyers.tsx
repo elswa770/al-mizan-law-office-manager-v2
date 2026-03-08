@@ -4,6 +4,15 @@ import {
   Users, Search, Filter, Plus, Phone, Mail, MapPin, Briefcase, 
   Award, DollarSign, Calendar, MoreVertical, Edit3, Trash2, CheckCircle, XCircle 
 } from 'lucide-react';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+// Local SearchSuggestion interface for Lawyers page
+interface LawyersSearchSuggestion {
+  id: string;
+  text: string;
+  type: 'lawyer' | 'specialization' | 'status' | 'location' | 'language' | 'level' | 'experience';
+  metadata?: string;
+}
 
 interface LawyersProps {
   lawyers: Lawyer[];
@@ -19,6 +28,7 @@ const Lawyers: React.FC<LawyersProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterLevel, setFilterLevel] = useState<string>('all');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLawyer, setEditingLawyer] = useState<Lawyer | null>(null);
 
@@ -57,6 +67,147 @@ const Lawyers: React.FC<LawyersProps> = ({
       return matchesSearch && matchesFilter;
     });
   }, [lawyers, searchTerm, filterLevel]);
+
+  // --- Search Suggestions ---
+  const suggestions = useMemo(() => {
+    const suggestionList: LawyersSearchSuggestion[] = [];
+    
+    // Add lawyer suggestions
+    lawyers.forEach(lawyer => {
+      const specText = lawyer.specialization === LawyerSpecialization.GENERAL ? 'عام' : 
+                      lawyer.specialization === LawyerSpecialization.CIVIL ? 'مدني' : 
+                      lawyer.specialization === LawyerSpecialization.CRIMINAL ? 'جنائي' : 'تخصص آخر';
+      const statusText = lawyer.status === LawyerStatus.ACTIVE ? 'نشط' : 
+                        lawyer.status === LawyerStatus.INACTIVE ? 'غير نشط' : 'في إجازة';
+      
+      suggestionList.push({
+        id: `lawyer-${lawyer.id}`,
+        text: lawyer.name,
+        type: 'lawyer',
+        metadata: `${specText} - ${statusText}`
+      });
+    });
+    
+    // Add specialization suggestions
+    const specializations = Object.values(LawyerSpecialization);
+    specializations.forEach(spec => {
+      const specLawyers = lawyers.filter(l => l.specialization === spec);
+      if (specLawyers.length > 0) {
+        const specText = spec === LawyerSpecialization.GENERAL ? 'عام' : 
+                        spec === LawyerSpecialization.CIVIL ? 'مدني' : 
+                        spec === LawyerSpecialization.CRIMINAL ? 'جنائي' : 'تخصص آخر';
+        suggestionList.push({
+          id: `specialization-${spec}`,
+          text: specText,
+          type: 'specialization',
+          metadata: `${specLawyers.length} محامي`
+        });
+      }
+    });
+    
+    // Add status suggestions
+    const statuses = Object.values(LawyerStatus);
+    statuses.forEach(status => {
+      const statusLawyers = lawyers.filter(l => l.status === status);
+      const statusText = status === LawyerStatus.ACTIVE ? 'نشطون' : 
+                       status === LawyerStatus.INACTIVE ? 'غير نشطين' : 'في إجازة';
+      suggestionList.push({
+        id: `status-${status}`,
+        text: statusText,
+        type: 'status',
+        metadata: `${statusLawyers.length} محامي`
+      });
+    });
+    
+    // Add location suggestions
+    const locations = [...new Set(lawyers.filter(l => l.officeLocation).map(l => l.officeLocation!))];
+    locations.forEach(location => {
+      const locationLawyers = lawyers.filter(l => l.officeLocation === location);
+      suggestionList.push({
+        id: `location-${location}`,
+        text: location,
+        type: 'location',
+        metadata: `${locationLawyers.length} محامي`
+      });
+    });
+    
+    // Add language suggestions
+    const allLanguages = [...new Set(lawyers.flatMap(l => l.languages || []))];
+    allLanguages.forEach(language => {
+      const langLawyers = lawyers.filter(l => l.languages?.includes(language));
+      suggestionList.push({
+        id: `language-${language}`,
+        text: language,
+        type: 'language',
+        metadata: `${langLawyers.length} محامي`
+      });
+    });
+    
+    // Add level suggestions
+    const levels = ['general', 'appellate', 'cassation'];
+    levels.forEach(level => {
+      const levelLawyers = lawyers.filter(l => l.barLevel === level);
+      const levelText = level === 'general' ? 'محامون عامون' : 
+                      level === 'appellate' ? 'محامون استئناف' : 'محامون نقض';
+      suggestionList.push({
+        id: `level-${level}`,
+        text: levelText,
+        type: 'level',
+        metadata: `${levelLawyers.length} محامي`
+      });
+    });
+    
+    return suggestionList;
+  }, [lawyers]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query && query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: LawyersSearchSuggestion) => {
+    if (suggestion.type === 'lawyer') {
+      // Find and scroll to lawyer
+      const lawyerId = suggestion.id.replace('lawyer-', '');
+      const lawyerElement = document.getElementById(`lawyer-${lawyerId}`);
+      if (lawyerElement) {
+        lawyerElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        lawyerElement.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2');
+        setTimeout(() => {
+          lawyerElement.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else if (suggestion.type === 'specialization') {
+      // Filter by specialization
+      const spec = suggestion.id.replace('specialization-', '');
+      setSearchTerm('');
+      // Note: You might want to add a filter state for specialization
+    } else if (suggestion.type === 'status') {
+      // Filter by status
+      const status = suggestion.id.replace('status-', '');
+      setSearchTerm('');
+      // Note: You might want to add a filter state for status
+    } else if (suggestion.type === 'location') {
+      // Search by location
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'language') {
+      // Search by language
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'level') {
+      // Filter by bar level
+      const level = suggestion.id.replace('level-', '');
+      setFilterLevel(level);
+      setSearchTerm('');
+    } else if (suggestion.type === 'experience') {
+      // Filter by experience range
+      setSearchTerm('');
+      // Note: You might want to add a filter state for experience
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,13 +266,13 @@ const Lawyers: React.FC<LawyersProps> = ({
       {/* Filters */}
       <div className="flex flex-col md:flex-row gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
         <div className="flex-1 relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-          <input 
-            type="text" 
-            placeholder="بحث بالاسم، الهاتف، الإيميل، رقم القيد، أو الموقع..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pr-10 pl-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+          <EnhancedSearch
+            onSearch={handleSearch}
+            onSuggestionClick={handleSuggestionClick as any}
+            placeholder="البحث في المحامين: الاسم، التخصص، الحالة، الموقع..."
+            suggestions={suggestions as any}
+            recentSearches={recentSearches}
+            className="w-full"
           />
         </div>
         <div className="flex gap-2">
@@ -144,6 +295,7 @@ const Lawyers: React.FC<LawyersProps> = ({
         {filteredLawyers.map(lawyer => (
           <div 
             key={lawyer.id} 
+            id={`lawyer-${lawyer.id}`}
             onClick={() => onLawyerClick(lawyer.id)}
             className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all cursor-pointer group relative overflow-hidden"
           >

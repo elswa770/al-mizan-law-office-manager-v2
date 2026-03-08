@@ -578,6 +578,23 @@ class OfflineManager {
         const realTaskId = this.getRealId(data.id);
         console.log(`🔄 Updating task with ID: ${data.id} (real: ${realTaskId})`);
         
+        // Safety check: verify task exists before updating
+        try {
+          const { db } = await import('./firebaseConfig');
+          const { doc, getDoc } = await import('firebase/firestore');
+          const taskDoc = await getDoc(doc(db, "tasks", realTaskId));
+          if (!taskDoc.exists()) {
+            console.warn(`⚠️ Task ${realTaskId} not found in Firebase, skipping update`);
+            throw new Error(`Task ${realTaskId} not found`);
+          }
+        } catch (error) {
+          if (error.message.includes('not found')) {
+            throw error;
+          }
+          // If we can't verify, proceed with update (might be permission issue)
+          console.warn(`⚠️ Could not verify task existence, proceeding with update:`, error);
+        }
+        
         // Update in Firestore using real ID
         await updateTask(realTaskId, data);
         break;

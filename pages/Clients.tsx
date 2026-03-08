@@ -1,8 +1,16 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Client, Case, Hearing, ClientType, ClientStatus } from '../types';
 import { User, Phone, MapPin, Search, Plus, X, Save, Mail, FileText, Grid, List, Building2, Filter, Download, MessageCircle, ArrowUpRight, DollarSign, Calendar, FileSpreadsheet, Printer, AlertTriangle, ShieldAlert, Wifi, WifiOff } from 'lucide-react';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+interface SearchSuggestion {
+  id: string;
+  text: string;
+  type: 'case' | 'client' | 'hearing' | 'document';
+  metadata?: string;
+}
 
 interface ClientsProps {
   clients: Client[];
@@ -23,6 +31,7 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
   // View State
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
   const [searchTerm, setSearchTerm] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [forceRerender, setForceRerender] = useState(0); // Force re-render for offline updates
@@ -32,7 +41,40 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
     console.log('🔄 Clients.tsx - Clients prop changed:', clients.length);
     setForceRerender(prev => prev + 1);
   }, [clients]);
-  
+
+  // Generate search suggestions
+  const suggestions = useMemo(() => {
+    const suggestionList: SearchSuggestion[] = [];
+    
+    // Add client suggestions only
+    clients.forEach(client => {
+      suggestionList.push({
+        id: `client-${client.id}`,
+        text: client.name,
+        type: 'client',
+        metadata: `${client.type} - ${client.phone} - ${client.nationalId}`
+      });
+    });
+    
+    return suggestionList;
+  }, [clients]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: SearchSuggestion) => {
+    if (suggestion.type === 'client') {
+      const clientId = suggestion.id.replace('client-', '');
+      onClientClick(clientId);
+    }
+  };
+
   // Export Menu State
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
@@ -511,16 +553,15 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
           </div>
 
           <div className="flex flex-col md:flex-row gap-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-             <div className="flex-1 relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="بحث باسم الموكل، رقم الهاتف، أو الرقم القومي..."
-                  className="w-full pr-10 pl-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:border-primary-500 outline-none transition-all text-slate-900 dark:text-white"
-                />
-             </div>
+             {/* Enhanced Search Bar */}
+             <EnhancedSearch
+               onSearch={handleSearch}
+               onSuggestionClick={handleSuggestionClick}
+               placeholder="البحث عن الموكلين بالاسم، رقم الهاتف، أو الرقم القومي..."
+               suggestions={suggestions}
+               recentSearches={recentSearches}
+               className="flex-1"
+             />
              
              <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0">
                 <select 

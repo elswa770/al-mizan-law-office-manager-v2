@@ -1626,6 +1626,18 @@ function App() {
       
       if (isOnline) {
         try {
+          // Safety check: verify task exists before updating
+          const { doc, getDoc } = await import('firebase/firestore');
+          const { db } = await import('./services/firebaseConfig');
+          const taskDoc = await getDoc(doc(db, "tasks", updatedTask.id));
+          
+          if (!taskDoc.exists()) {
+            console.warn(`⚠️ Task ${updatedTask.id} not found in Firebase, removing from local state`);
+            // Remove from local state if it doesn't exist in Firebase
+            setTasks(prev => prev.filter(t => t.id !== updatedTask.id));
+            return;
+          }
+          
           // تحديث في Firebase
           await updateTask(updatedTask.id, updatedTask);
           

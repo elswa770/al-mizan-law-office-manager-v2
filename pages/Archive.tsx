@@ -10,6 +10,15 @@ import {
   query, where, getDocs, onSnapshot, orderBy 
 } from 'firebase/firestore';
 import { db } from '../services/firebaseConfig';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+// Local SearchSuggestion interface for Archive page
+interface ArchiveSearchSuggestion {
+  id: string;
+  text: string;
+  type: 'case' | 'client' | 'location' | 'request' | 'status' | 'date';
+  metadata?: string;
+}
 
 interface ArchiveProps {
   cases: Case[];
@@ -23,6 +32,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
   const [activeTab, setActiveTab] = useState<'digital' | 'physical' | 'requests'>('digital');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'archived' | 'active'>('archived');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   // Function to update case status with closed date
   const updateCaseStatus = async (caseId: string, newStatus: CaseStatus) => {
@@ -164,6 +174,135 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
     setCabinets(locations.filter(loc => loc.type === ArchiveLocationType.CABINET));
     setShelves(locations.filter(loc => loc.type === ArchiveLocationType.SHELF));
   }, [locations]);
+
+  // --- Search Suggestions ---
+  const suggestions = useMemo(() => {
+    const suggestionList: ArchiveSearchSuggestion[] = [];
+    
+    // Add case suggestions
+    cases.forEach(c => {
+      suggestionList.push({
+        id: `case-${c.id}`,
+        text: `${c.caseNumber} / ${c.year} - ${c.title}`,
+        type: 'case',
+        metadata: `${c.status === 'closed' ? 'مغلقة' : c.status === 'archived' ? 'مؤرشفة' : c.status === 'open' ? 'مفتوحة' : c.status === 'judgment' ? 'صدر فيها حكم' : 'تحت التنفيذ'} - ${c.court}`
+      });
+    });
+    
+    // Add client suggestions
+    clients.forEach(client => {
+      const clientCases = cases.filter(c => c.clientId === client.id);
+      if (clientCases.length > 0) {
+        suggestionList.push({
+          id: `client-${client.id}`,
+          text: client.name,
+          type: 'client',
+          metadata: `${clientCases.length} قضية - ${client.type === 'individual' ? 'فردي' : 'شركة'}`
+        });
+      }
+    });
+    
+    // Add location suggestions
+    locations.forEach(location => {
+      suggestionList.push({
+        id: `location-${location.id}`,
+        text: location.name,
+        type: 'location',
+        metadata: `${location.type === 'room' ? 'غرفة' : location.type === 'cabinet' ? 'خزانة' : location.type === 'shelf' ? 'رف' : 'صندوق'} - ${location.occupied}/${location.capacity} مستخدم`
+      });
+    });
+    
+    // Add request suggestions
+    requests.forEach(request => {
+      const caseInfo = cases.find(c => c.id === request.caseId);
+      suggestionList.push({
+        id: `request-${request.id}`,
+        text: `طلب ${request.requesterName}`,
+        type: 'request',
+        metadata: `${
+          request.status === ArchiveRequestStatus.PENDING ? 'في الانتظار' : 
+          request.status === ArchiveRequestStatus.APPROVED ? 'مؤرش' : 
+          request.status === ArchiveRequestStatus.REJECTED ? 'مرفوض' : 
+          request.status === ArchiveRequestStatus.RETURNED ? 'تم الإرجاع' : 
+          request.status === ArchiveRequestStatus.ARCHIVED_RETURNED ? 'مؤرش في الأرشيف' : 
+          'غير محدد'
+        } - ${caseInfo?.title || 'قضية غير محددة'}`
+      });
+    });
+    
+    // Add status suggestions
+    const statuses = ['all', 'archived', 'active'];
+    statuses.forEach(status => {
+      suggestionList.push({
+        id: `status-${status}`,
+        text: status === 'all' ? 'كل الحالات' : status === 'archived' ? 'المؤرشفة' : 'النشطة',
+        type: 'status',
+        metadata: `${cases.filter(c => filterStatus === 'all' ? true : filterStatus === 'archived' ? c.status === 'archived' : c.status !== 'archived').length} قضية`
+      });
+    });
+    
+    // Add date suggestions
+    const dates = [...new Set(cases.map(c => {
+      // Use available date fields, fallback to filingDate or startDate
+      const dateToUse = c.filingDate || c.startDate || c.caseOpeningDate;
+      return dateToUse ? dateToUse.split('T')[0] : 'غير محدد';
+    }).filter(date => date !== 'غير محدد'))];
+    dates.forEach(date => {
+      suggestionList.push({
+        id: `date-${date}`,
+        text: date,
+        type: 'date',
+        metadata: `${cases.filter(c => {
+          const dateToUse = c.filingDate || c.startDate || c.caseOpeningDate;
+          return dateToUse && dateToUse.startsWith(date);
+        }).length} قضية`
+      });
+    });
+    
+    return suggestionList;
+  }, [cases, clients, locations, requests, filterStatus]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query && query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: ArchiveSearchSuggestion) => {
+    if (suggestion.type === 'case') {
+      // Find and scroll to case
+      const caseId = suggestion.id.replace('case-', '');
+      const caseElement = document.getElementById(`case-${caseId}`);
+      if (caseElement) {
+        caseElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        caseElement.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2');
+        setTimeout(() => {
+          caseElement.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else if (suggestion.type === 'client') {
+      // Filter by client
+      const clientId = suggestion.id.replace('client-', '');
+      setSearchTerm(clients.find(c => c.id === clientId)?.name || '');
+    } else if (suggestion.type === 'location') {
+      // Search by location
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'request') {
+      // Search by request
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'status') {
+      // Filter by status
+      const status = suggestion.id.replace('status-', '');
+      setFilterStatus(status as 'all' | 'archived' | 'active');
+      setSearchTerm('');
+    } else if (suggestion.type === 'date') {
+      // Search by date
+      setSearchTerm(suggestion.text);
+    }
+  };
 
   // Check if case is borrowed
   const isCaseBorrowed = (caseId: string) => {
@@ -581,7 +720,17 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
   // Filtered Data
   const filteredCases = useMemo(() => {
     return cases.filter(c => {
-      const matchesSearch = c.title.includes(searchTerm) || c.caseNumber.includes(searchTerm) || c.clientName.includes(searchTerm);
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm.trim() || 
+        c.title.toLowerCase().includes(searchLower) || 
+        c.caseNumber.toLowerCase().includes(searchLower) || 
+        c.clientName.toLowerCase().includes(searchLower) ||
+        c.court.toLowerCase().includes(searchLower) ||
+        // Search in archive data
+        (c.archiveData?.locationName && c.archiveData.locationName.toLowerCase().includes(searchLower)) ||
+        (c.archiveData?.fileNumber && c.archiveData.fileNumber.toLowerCase().includes(searchLower)) ||
+        (c.archiveData?.archiveNotes && c.archiveData.archiveNotes.toLowerCase().includes(searchLower));
+      
       const isArchived = c.status === CaseStatus.CLOSED || c.status === CaseStatus.ARCHIVED;
       const hasPhysicalArchive = !!c.archiveData;
       
@@ -698,13 +847,13 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
       {/* Search & Filter Bar */}
       <div className="flex flex-col md:flex-row gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
         <div className="flex-1 relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-          <input 
-            type="text" 
-            placeholder="بحث في الأرشيف الرقمي (رقم القضية، الموكل، العنوان)..." 
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pr-10 pl-4 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+          <EnhancedSearch
+            onSearch={handleSearch}
+            onSuggestionClick={handleSuggestionClick as any}
+            placeholder="البحث في الأرشيف: القضايا، الموكلين، المواقع، الطلبات..."
+            suggestions={suggestions as any}
+            recentSearches={recentSearches}
+            className="w-full"
           />
         </div>
         <div className="flex gap-2">
@@ -726,7 +875,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
       {/* Cases Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredCases.map(c => (
-          <div key={c.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group relative">
+          <div key={c.id} id={`case-${c.id}`} className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 hover:shadow-md transition-all group relative">
             {/* Borrowed Ribbon */}
             {isCaseBorrowed(c.id) && (
               <div className="absolute top-0 right-0 w-20 h-20 overflow-hidden">

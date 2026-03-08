@@ -1,8 +1,16 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Case, Client, CaseStatus, CourtType, LawBranch, Lawyer, Hearing } from '../types';
 import { Briefcase, Search, Plus, Filter, User, Calendar, MapPin, ArrowUpRight, X, Save, Gavel, LayoutGrid, List, Users, Scale, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+interface SearchSuggestion {
+  id: string;
+  text: string;
+  type: 'case' | 'client' | 'hearing' | 'document';
+  metadata?: string;
+}
 
 interface CasesProps {
   cases: Case[];
@@ -21,6 +29,7 @@ const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCase
   const pendingCount = offlineStatus?.pendingActions ?? 0;
   
   const [searchTerm, setSearchTerm] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [courtFilter, setCourtFilter] = useState<string>('all');
@@ -34,6 +43,73 @@ const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCase
     console.log('🔄 Cases.tsx - Cases prop changed:', cases.length);
     setForceRerender(prev => prev + 1);
   }, [cases]);
+
+  // Generate search suggestions
+  const suggestions = useMemo(() => {
+    const suggestionList: SearchSuggestion[] = [];
+    
+    // Add case suggestions
+    cases.forEach(c => {
+      suggestionList.push({
+        id: `case-${c.id}`,
+        text: `${c.caseNumber} / ${c.year} - ${c.title}`,
+        type: 'case',
+        metadata: `${c.clientName} - ${c.court}`
+      });
+    });
+    
+    // Add client suggestions
+    clients.forEach(client => {
+      suggestionList.push({
+        id: `client-${client.id}`,
+        text: client.name,
+        type: 'client',
+        metadata: `موكل - ${client.phone || ''}`
+      });
+    });
+    
+    // Add hearing suggestions
+    hearings.forEach(hearing => {
+      const caseInfo = cases.find(c => c.id === hearing.caseId);
+      if (caseInfo) {
+        suggestionList.push({
+          id: `hearing-${hearing.id}`,
+          text: `جلسة ${hearing.date}`,
+          type: 'hearing',
+          metadata: `${caseInfo.title} - ${hearing.time || ''}`
+        });
+      }
+    });
+    
+    return suggestionList;
+  }, [cases, clients, hearings]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: SearchSuggestion) => {
+    if (suggestion.type === 'case') {
+      const caseId = suggestion.id.replace('case-', '');
+      onCaseClick(caseId);
+    } else if (suggestion.type === 'client') {
+      setSearchTerm(suggestion.text);
+    } else if (suggestion.type === 'hearing') {
+      const hearingId = suggestion.id.replace('hearing-', '');
+      const hearing = hearings.find(h => h.id === hearingId);
+      if (hearing) {
+        const caseInfo = cases.find(c => c.id === hearing.caseId);
+        if (caseInfo) {
+          onCaseClick(caseInfo.id);
+        }
+      }
+    }
+  };
   
   // New Case Form State
   const [formData, setFormData] = useState<Partial<Case>>({
@@ -368,17 +444,15 @@ const Cases: React.FC<CasesProps> = ({ cases, clients, lawyers, hearings, onCase
 
       {/* Filters & View Toggle */}
       <div className="flex flex-col gap-4">
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="بحث برقم القضية، اسم الموكل، أو العنوان..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pr-10 pl-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-primary-500 text-slate-900 dark:text-white transition-colors"
-          />
-        </div>
+        {/* Enhanced Search Bar */}
+        <EnhancedSearch
+          onSearch={handleSearch}
+          onSuggestionClick={handleSuggestionClick}
+          placeholder="البحث في القضايا، الموكلين، الجلسات..."
+          suggestions={suggestions}
+          recentSearches={recentSearches}
+          className="w-full"
+        />
         
         {/* Advanced Filters */}
         <div className="flex flex-wrap items-center gap-4">

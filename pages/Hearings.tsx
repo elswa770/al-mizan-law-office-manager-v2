@@ -3,6 +3,15 @@ import React, { useState, useMemo, useRef } from 'react';
 import { Case, Hearing, CaseStatus, HearingStatus, Lawyer } from '../types';
 import { Calendar, MapPin, Gavel, AlertCircle, X, Edit3, Link as LinkIcon, ExternalLink, ChevronLeft, ChevronRight, List, LayoutGrid, Clock, Filter, Printer, Download, Plus, CheckSquare, AlignJustify, DollarSign, CalendarDays, ArrowLeftCircle, CheckCircle, FileText, Upload, Image as ImageIcon, Eye, Trash2, Wifi, WifiOff, Cloud, CloudOff, RefreshCw } from 'lucide-react';
 import { useOfflineStatus, useOfflineActions } from '../hooks/useOfflineStatus';
+import EnhancedSearch from '../components/EnhancedSearch';
+
+// Local SearchSuggestion interface for Hearings page
+interface HearingsSearchSuggestion {
+  id: string;
+  text: string;
+  type: 'hearing' | 'case' | 'lawyer' | 'date' | 'court';
+  metadata?: string;
+}
 
 interface HearingsProps {
   hearings: Hearing[];
@@ -25,6 +34,8 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
   const [viewMode, setViewMode] = useState<'timeline' | 'table' | 'calendar'>('timeline');
   const [filterType, setFilterType] = useState<'upcoming' | 'past' | 'today'>('upcoming');
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
+  const [searchTerm, setSearchTerm] = useState('');
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   
   // --- Sync Handler ---
   const handleSyncNow = async () => {
@@ -97,14 +108,127 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
   const getCaseDetails = (caseId: string) => cases.find(c => c.id === caseId);
   
   const getLawyerName = (id?: string) => {
-    if (!id) return 'غير معين';
+    if (!id) return 'غير محدد';
     const lawyer = lawyers.find(l => l.id === id);
-    return lawyer ? lawyer.name : id;
+    return lawyer ? lawyer.name : 'محامٍ محذوف';
   };
   
   const parseLocalDate = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(year, month - 1, day);
+  };
+
+  // --- Search Suggestions ---
+  const suggestions = useMemo(() => {
+    const suggestionList: HearingsSearchSuggestion[] = [];
+    
+    // Add hearing suggestions
+    hearings.forEach(hearing => {
+      const caseInfo = getCaseDetails(hearing.caseId);
+      suggestionList.push({
+        id: `hearing-${hearing.id}`,
+        text: caseInfo ? `${caseInfo.caseNumber} / ${caseInfo.year}` : 'جلسة',
+        type: 'hearing',
+        metadata: `${hearing.date} - ${hearing.time} - ${caseInfo?.court || 'غير محدد'}`
+      });
+    });
+    
+    // Add case suggestions
+    cases.forEach(c => {
+      const caseHearings = hearings.filter(h => h.caseId === c.id);
+      if (caseHearings.length > 0) {
+        suggestionList.push({
+          id: `case-${c.id}`,
+          text: `${c.caseNumber} / ${c.year} - ${c.title}`,
+          type: 'case',
+          metadata: `${caseHearings.length} جلسة - ${c.court}`
+        });
+      }
+    });
+    
+    // Add lawyer suggestions
+    lawyers.forEach(lawyer => {
+      const lawyerHearings = hearings.filter(h => h.assignedLawyerId === lawyer.id);
+      if (lawyerHearings.length > 0) {
+        suggestionList.push({
+          id: `lawyer-${lawyer.id}`,
+          text: lawyer.name,
+          type: 'lawyer',
+          metadata: `${lawyerHearings.length} جلسة مكلفة`
+        });
+      }
+    });
+    
+    // Add date suggestions
+    const uniqueDates = [...new Set(hearings.map(h => h.date))];
+    uniqueDates.forEach(date => {
+      const dateHearings = hearings.filter(h => h.date === date);
+      suggestionList.push({
+        id: `date-${date}`,
+        text: date,
+        type: 'date',
+        metadata: `${dateHearings.length} جلسة في هذا التاريخ`
+      });
+    });
+    
+    // Add court suggestions
+    const uniqueCourts = [...new Set(cases.map(c => c.court).filter(Boolean))];
+    uniqueCourts.forEach(court => {
+      const courtCases = cases.filter(c => c.court === court);
+      const courtHearings = hearings.filter(h => {
+        const caseInfo = getCaseDetails(h.caseId);
+        return caseInfo?.court === court;
+      });
+      if (courtHearings.length > 0) {
+        suggestionList.push({
+          id: `court-${court}`,
+          text: court,
+          type: 'court',
+          metadata: `${courtHearings.length} جلسة - ${courtCases.length} قضية`
+        });
+      }
+    });
+    
+    return suggestionList;
+  }, [hearings, cases, lawyers]);
+
+  const handleSearch = (query: string) => {
+    setSearchTerm(query);
+    
+    // Add to recent searches if not empty and not already in list
+    if (query.trim() && !recentSearches.includes(query)) {
+      setRecentSearches(prev => [query, ...prev.slice(0, 4)]);
+    }
+  };
+
+  const handleSuggestionClick = (suggestion: HearingsSearchSuggestion) => {
+    if (suggestion.type === 'hearing') {
+      // Find and scroll to hearing
+      const hearingId = suggestion.id.replace('hearing-', '');
+      const hearingElement = document.getElementById(`hearing-${hearingId}`);
+      if (hearingElement) {
+        hearingElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        hearingElement.classList.add('ring-2', 'ring-primary-500', 'ring-offset-2');
+        setTimeout(() => {
+          hearingElement.classList.remove('ring-2', 'ring-primary-500', 'ring-offset-2');
+        }, 3000);
+      }
+    } else if (suggestion.type === 'case') {
+      const caseId = suggestion.id.replace('case-', '');
+      onCaseClick?.(caseId);
+    } else if (suggestion.type === 'lawyer') {
+      // Filter by lawyer
+      const lawyerId = suggestion.id.replace('lawyer-', '');
+      setSearchTerm(getLawyerName(lawyerId));
+    } else if (suggestion.type === 'date') {
+      // Filter by date
+      const date = suggestion.id.replace('date-', '');
+      setSearchTerm(date);
+    } else if (suggestion.type === 'court') {
+      // Filter by court
+      const court = suggestion.id.replace('court-', '');
+      setSearchTerm(court);
+    }
   };
 
   const today = new Date();
@@ -142,12 +266,30 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
       if (filterType === 'today') return hDate.getTime() === today.getTime();
       if (filterType === 'upcoming') return hDate >= today;
       return hDate < today;
+    }).filter(hearing => {
+      // Apply search filter
+      if (!searchTerm.trim()) return true;
+      
+      const caseInfo = getCaseDetails(hearing.caseId);
+      const searchLower = searchTerm.toLowerCase();
+      
+      return (
+        caseInfo?.caseNumber.toLowerCase().includes(searchLower) ||
+        caseInfo?.year.toString().includes(searchLower) ||
+        caseInfo?.title.toLowerCase().includes(searchLower) ||
+        caseInfo?.court.toLowerCase().includes(searchLower) ||
+        hearing.date.includes(searchLower) ||
+        hearing.time.includes(searchLower) ||
+        hearing.requirements?.toLowerCase().includes(searchLower) ||
+        hearing.decision?.toLowerCase().includes(searchLower) ||
+        getLawyerName(hearing.assignedLawyerId).toLowerCase().includes(searchLower)
+      );
     }).sort((a, b) => {
       const dateA = parseLocalDate(a.date).getTime();
       const dateB = parseLocalDate(b.date).getTime();
       return filterType === 'past' ? dateB - dateA : dateA - dateB;
     });
-  }, [hearings, filterType]);
+  }, [hearings, filterType, searchTerm, cases, lawyers]);
 
   // --- Handlers ---
 
@@ -289,7 +431,7 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
         const isPast = hDate < today;
 
         return (
-          <div key={hearing.id} className="flex gap-4 group">
+          <div key={hearing.id} id={`hearing-${hearing.id}`} className="flex gap-4 group">
              {/* Date Column */}
              <div className="flex flex-col items-center min-w-[60px] pt-2">
                 <span className="text-xs font-bold text-slate-400">{hDate.toLocaleDateString('ar-EG', { month: 'short' })}</span>
@@ -592,18 +734,31 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
 
          {/* Filters & View Switcher */}
          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-            <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex items-center w-full sm:w-auto">
-               <button onClick={() => setFilterType('upcoming')} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-bold transition-all ${filterType === 'upcoming' ? 'bg-white dark:bg-slate-600 shadow text-primary-700 dark:text-primary-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>القادمة</button>
-               <button onClick={() => setFilterType('today')} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-bold transition-all ${filterType === 'today' ? 'bg-white dark:bg-slate-600 shadow text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>اليوم</button>
-               <button onClick={() => setFilterType('past')} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-md text-xs font-bold transition-all ${filterType === 'past' ? 'bg-white dark:bg-slate-600 shadow text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>السجل السابق</button>
+            <div className="flex-1 w-full sm:w-auto">
+              <EnhancedSearch
+                onSearch={handleSearch}
+                onSuggestionClick={handleSuggestionClick as any}
+                placeholder="البحث في الجلسات، القضايا، المحامين، المحاكم..."
+                suggestions={suggestions as any}
+                recentSearches={recentSearches}
+                className="w-full"
+              />
             </div>
+            
+            <div className="flex flex-col sm:flex-row gap-2 items-center">
+               <div className="bg-slate-100 dark:bg-slate-700 p-1 rounded-lg flex items-center">
+                  <button onClick={() => setFilterType('upcoming')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${filterType === 'upcoming' ? 'bg-white dark:bg-slate-600 shadow text-primary-700 dark:text-primary-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>القادمة</button>
+                  <button onClick={() => setFilterType('today')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${filterType === 'today' ? 'bg-white dark:bg-slate-600 shadow text-indigo-700 dark:text-indigo-300' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>اليوم</button>
+                  <button onClick={() => setFilterType('past')} className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${filterType === 'past' ? 'bg-white dark:bg-slate-600 shadow text-slate-700 dark:text-slate-200' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>السابق</button>
+               </div>
 
-            <div className="flex bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden shadow-sm">
-               <button onClick={() => setViewMode('timeline')} className={`p-2 ${viewMode === 'timeline' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><AlignJustify className="w-4 h-4" /></button>
-               <div className="w-px bg-slate-300 dark:bg-slate-600"></div>
-               <button onClick={() => setViewMode('table')} className={`p-2 ${viewMode === 'table' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><List className="w-4 h-4" /></button>
-               <div className="w-px bg-slate-300 dark:bg-slate-600"></div>
-               <button onClick={() => setViewMode('calendar')} className={`p-2 ${viewMode === 'calendar' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><CalendarDays className="w-4 h-4" /></button>
+               <div className="flex bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden shadow-sm">
+                  <button onClick={() => setViewMode('timeline')} className={`p-2 ${viewMode === 'timeline' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><AlignJustify className="w-4 h-4" /></button>
+                  <div className="w-px bg-slate-300 dark:bg-slate-600"></div>
+                  <button onClick={() => setViewMode('table')} className={`p-2 ${viewMode === 'table' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><List className="w-4 h-4" /></button>
+                  <div className="w-px bg-slate-300 dark:bg-slate-600"></div>
+                  <button onClick={() => setViewMode('calendar')} className={`p-2 ${viewMode === 'calendar' ? 'bg-slate-100 dark:bg-slate-700 text-slate-900 dark:text-white' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><CalendarDays className="w-4 h-4" /></button>
+               </div>
             </div>
          </div>
       </div>
