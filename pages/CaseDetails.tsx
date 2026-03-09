@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Case, Client, Hearing, CaseStatus, CaseDocument, FinancialTransaction, PaymentMethod, Lawyer, CaseProgress, CaseMilestone, CaseAchievement, CaseNote, CaseProcedure } from '../types';
+import { Case, Client, Hearing, CaseStatus, CaseDocument, FinancialTransaction, PaymentMethod, Lawyer, CaseProgress, CaseMilestone, CaseAchievement, CaseNote, CaseProcedure, Task } from '../types';
 import { ArrowRight, Edit3, Calendar, FileText, Briefcase, MapPin, User, Shield, Save, X, Activity, DollarSign, Clock, CheckCircle, AlertCircle, Phone, Gavel, MoreVertical, Plus, Upload, FileCheck, Eye, Trash2, Wallet, TrendingUp, TrendingDown, ArrowUpRight, ArrowDownLeft, Calculator, Edit, Users, Cloud, Download, ArrowLeftCircle, Wifi, WifiOff, RefreshCw, Target } from 'lucide-react';
 import { googleDriveService } from '../services/googleDriveService';
 import { useOfflineStatus } from '../hooks/useOfflineStatus';
 import { offlineManager } from '../services/offlineManager';
 import CaseProgressTracker from '../components/CaseProgressTracker';
+import AddHearingModal from '../components/AddHearingModal';
 
 interface CaseDetailsProps {
   caseId: string;
@@ -14,6 +15,7 @@ interface CaseDetailsProps {
   hearings: Hearing[];
   onBack: () => void;
   onAddHearing?: (hearing: Hearing) => void;
+  onAddTask?: (task: Task) => void;
   onUpdateCase?: (updatedCase: Case) => void;
   onUpdateHearing?: (hearing: Hearing) => void;
   onDeleteHearing?: (hearingId: string) => void;
@@ -21,7 +23,7 @@ interface CaseDetailsProps {
   readOnly?: boolean;
 }
 
-const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawyers, hearings, onBack, onAddHearing, onUpdateCase, onUpdateHearing, onDeleteHearing, onClientClick, readOnly = false }) => {
+const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawyers, hearings, onBack, onAddHearing, onAddTask, onUpdateCase, onUpdateHearing, onDeleteHearing, onClientClick, readOnly = false }) => {
   // --- Offline Status ---
   const offlineStatus = useOfflineStatus();
   const isOnline = offlineStatus?.online ?? true;
@@ -112,6 +114,45 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
 
   if (!currentCase) return <div className="p-8 text-center text-slate-500">القضية غير موجودة</div>;
   
+  // Handler for saving hearing with task integration
+  const handleSaveHearingWithTask = async (hearing: Hearing, task?: Task) => {
+    // Handle online/offline logic for hearing
+    if (isOnline) {
+      onAddHearing && onAddHearing(hearing);
+      console.log('✅ New hearing created online');
+    } else {
+      await offlineManager.addPendingAction({
+        type: 'create',
+        entity: 'hearing',
+        data: hearing
+      });
+      // Update local state immediately for better UX
+      onAddHearing && onAddHearing(hearing);
+      console.log('📱 New hearing created offline');
+    }
+
+    // Handle task if created
+    if (task && onAddTask) {
+      console.log('🔥 Task received in CaseDetails:', task);
+      console.log('🔥 onAddTask available:', !!onAddTask);
+      if (isOnline) {
+        onAddTask(task);
+        console.log('✅ Task created online');
+      } else {
+        await offlineManager.addPendingAction({
+          type: 'create',
+          entity: 'task',
+          data: task
+        });
+        // Update local state immediately
+        onAddTask(task);
+        console.log('📱 Task created offline');
+      }
+    } else {
+      console.log('🔥 No task to create or onAddTask not available:', { task: !!task, onAddTask: !!onAddTask });
+    }
+  };
+
   const handleSaveNewHearing = (e: React.FormEvent) => {
     e.preventDefault();
     if (!onAddHearing || !newHearingData.date) return;
@@ -1536,8 +1577,16 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
           </div>
        )}
 
-       {/* Add Hearing Modal */}
-       {isHearingModalOpen && (
+       {/* Add Hearing Modal - Using AddHearingModal Component */}
+       <AddHearingModal
+         isOpen={isHearingModalOpen && !editingHearing}
+         onClose={() => setIsHearingModalOpen(false)}
+         onSave={handleSaveHearingWithTask}
+         caseId={caseId}
+       />
+
+       {/* Edit Hearing Wizard Modal - Keep existing wizard for editing */}
+       {isHearingModalOpen && editingHearing && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
             {/* Offline Status Indicator */}
             {!isOnline && (
@@ -1821,46 +1870,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                      )}
                   </div>
                </div>
-            ) : (
-               // Simple Modal for Adding New Hearings
-               <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md animate-in zoom-in-95 duration-200">
-                  <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between">
-                    <h3 className="font-bold text-slate-900 dark:text-white">إضافة جلسة جديدة</h3>
-                    <button onClick={() => setIsHearingModalOpen(false)}><X className="w-5 h-5 text-slate-400 hover:text-red-500" /></button>
-                  </div>
-                  <form onSubmit={handleSaveHearing} className="p-4 space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                       <div>
-                          <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">التاريخ</label>
-                          <input 
-                            type="date" 
-                            required 
-                            className="w-full border dark:border-slate-600 p-2 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white" 
-                            value={newHearingData.date} 
-                            onChange={e => setNewHearingData({...newHearingData, date: e.target.value})} 
-                          />
-                       </div>
-                       <div>
-                          <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">الوقت</label>
-                          <input 
-                            type="time" 
-                            className="w-full border dark:border-slate-600 p-2 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white" 
-                            value={newHearingData.time} 
-                            onChange={e => setNewHearingData({...newHearingData, time: e.target.value})} 
-                          />
-                       </div>
-                    </div>
-                  <div>
-                     <label className="block text-sm font-medium mb-1 text-slate-700 dark:text-slate-300">المطلوب للجلسة</label>
-                     <textarea placeholder="المطلوب للجلسة..." className="w-full border dark:border-slate-600 p-2 rounded bg-white dark:bg-slate-700 text-slate-900 dark:text-white" rows={3} value={newHearingData.requirements} onChange={e => setNewHearingData({...newHearingData, requirements: e.target.value})}></textarea>
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={() => setIsHearingModalOpen(false)} className="flex-1 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">إلغاء</button>
-                    <button type="submit" className="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 transition-colors">حفظ الجلسة</button>
-                  </div>
-                </form>
-             </div>
-            )}
+            ) : null}
           </div>
        )}
     </div>

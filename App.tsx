@@ -2539,6 +2539,7 @@ function App() {
               onBack={handleBackToCases}
               onUpdateCase={handleUpdateCase}
               onAddHearing={handleAddHearing}
+              onAddTask={handleAddTask}
               onUpdateHearing={handleUpdateHearing}
               onDeleteHearing={handleDeleteHearing}
               onClientClick={handleClientClick}
