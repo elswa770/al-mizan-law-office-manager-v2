@@ -165,19 +165,23 @@ const getAuthErrorMessage = (errorCode: string): string => {
   return errorMessages[errorCode] || 'حدث خطأ غير متوقع';
 };
 
-const getDefaultPermissions = () => [
+export const getDefaultPermissions = () => [
   { moduleId: 'dashboard', access: 'read' as const },
   { moduleId: 'cases', access: 'read' as const },
   { moduleId: 'clients', access: 'read' as const },
   { moduleId: 'hearings', access: 'read' as const },
   { moduleId: 'tasks', access: 'read' as const },
+  { moduleId: 'appointments', access: 'read' as const },
   { moduleId: 'documents', access: 'read' as const },
   { moduleId: 'fees', access: 'none' as const },
   { moduleId: 'expenses', access: 'none' as const },
   { moduleId: 'reports', access: 'none' as const },
   { moduleId: 'settings', access: 'none' as const },
   { moduleId: 'ai-assistant', access: 'read' as const },
-  { moduleId: 'references', access: 'read' as const }
+  { moduleId: 'references', access: 'read' as const },
+  { moduleId: 'locations', access: 'read' as const },
+  { moduleId: 'calculators', access: 'read' as const },
+  { moduleId: 'generator', access: 'read' as const }
 ];
 
 // --- Current User Helper ---

@@ -63,19 +63,52 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
   const filteredHearings = useMemo(() => {
     if (!searchTerm) return hearings;
     const term = searchTerm.toLowerCase();
-    return hearings.filter(h => {
-      const relatedCase = cases.find(c => c.id === h.caseId);
-      return (
-        h.date.toLowerCase().includes(term) ||
-        h.time.toLowerCase().includes(term) ||
-        h.requirements?.toLowerCase().includes(term) ||
-        h.decision?.toLowerCase().includes(term) ||
-        relatedCase?.title.toLowerCase().includes(term) ||
-        relatedCase?.caseNumber.toLowerCase().includes(term) ||
-        relatedCase?.clientName.toLowerCase().includes(term)
-      );
-    });
-  }, [hearings, cases, searchTerm]);
+    return hearings
+      .filter(h => {
+        const relatedCase = cases.find(c => c.id === h.caseId);
+        return (
+          h.date.toLowerCase().includes(term) ||
+          (relatedCase && relatedCase.title.toLowerCase().includes(term)) ||
+          (relatedCase && relatedCase.caseNumber.toLowerCase().includes(term)) ||
+          (relatedCase && relatedCase.court.toLowerCase().includes(term))
+        );
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Sort by date (earliest first)
+  }, [cases, hearings, searchTerm]);
+
+  // --- Date Calculations for Week Filtering ---
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const currentWeekStart = new Date(today);
+  currentWeekStart.setDate(today.getDate() - today.getDay()); // Start of current week (Sunday)
+  const currentWeekEnd = new Date(currentWeekStart);
+  currentWeekEnd.setDate(currentWeekStart.getDate() + 6); // End of current week (Saturday)
+
+  // Separate today's hearings and upcoming hearings for better display
+  const todayHearings = filteredHearings.filter(h => {
+    const hearingDate = new Date(h.date);
+    hearingDate.setHours(0, 0, 0, 0);
+    return hearingDate.getTime() === today.getTime();
+  });
+
+  const upcomingHearings = filteredHearings.filter(h => {
+    const hearingDate = new Date(h.date);
+    hearingDate.setHours(0, 0, 0, 0);
+    return hearingDate.getTime() > today.getTime();
+  });
+
+  // Filter for current week only
+  const currentWeekHearings = upcomingHearings.filter(h => {
+    const hearingDate = new Date(h.date);
+    hearingDate.setHours(0, 0, 0, 0);
+    return hearingDate.getTime() >= currentWeekStart.getTime() && hearingDate.getTime() <= currentWeekEnd.getTime();
+  });
+
+  // Sort upcoming hearings with closest first
+  const sortedUpcomingHearings = upcomingHearings.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Combine: today's hearings first (sorted by time), then current week, then other upcoming
+  const displayHearings = [...todayHearings.sort((a, b) => (a.time || '09:00').localeCompare(b.time || '09:00')), ...currentWeekHearings.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), ...sortedUpcomingHearings.filter(h => !currentWeekHearings.includes(h))];
 
   // --- Activity Logging ---
   const logActivity = (action: string, target: string, user: string = 'مستخدم') => {
@@ -142,14 +175,11 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
         }
       }
     } catch (error) {
-      console.warn('Failed to show notification:', error);
+      console.error('Failed to show notification:', error);
     }
   }, [criticalCases, generalSettings?.enableSystemNotifications]);
 
   // --- Derived Stats ---
-  const today = new Date();
-  today.setHours(0,0,0,0);
-
   const activeCases = cases.filter(c => c.status !== CaseStatus.CLOSED && c.status !== CaseStatus.ARCHIVED).length;
   
   // Today's appointments
@@ -186,18 +216,12 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
     console.clear();
   }, 5000);
   
-  const todayHearings = hearings.filter(h => {
-    const d = new Date(h.date);
-    d.setHours(0,0,0,0);
-    return d.getTime() === today.getTime();
-  });
+  const totalDues = cases.reduce((acc, c) => acc + (c.finance ? (c.finance.agreedFees - c.finance.paidAmount) : 0), 0);
 
-  const delayedHearings = hearings.filter(h => 
-    new Date(h.date) < today && 
+  const delayedHearings = displayHearings.filter(h => 
+    new Date(h.date) < new Date() && 
     (h.status === HearingStatus.SCHEDULED || !h.status)
   ).length;
-
-  const totalDues = cases.reduce((acc, c) => acc + (c.finance ? (c.finance.agreedFees - c.finance.paidAmount) : 0), 0);
 
   // --- Smart Logic: Critical Cases ---
   // (Using the criticalCases defined above in Data Processing section)
@@ -431,22 +455,37 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
                   <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
                      <Calendar className="w-5 h-5 text-amber-600 dark:text-amber-500" />
                      جلسات اليوم والقادمة {searchTerm && `(البحث: ${filteredHearings.length})`}
+                     {todayHearings.length > 0 && (
+                        <span className="ml-2 px-2 py-1 bg-amber-600 text-white text-xs rounded-full animate-pulse">
+                           اليوم
+                        </span>
+                     )}
                   </h3>
                   <button onClick={() => onNavigate && onNavigate('hearings')} className="text-xs text-primary-600 dark:text-primary-400 font-bold hover:underline">عرض الجدول الكامل</button>
                </div>
                
                <div className="divide-y divide-slate-50 dark:divide-slate-700">
-                  {filteredHearings.length > 0 ? filteredHearings.slice(0, 5).map(h => {
+                  {displayHearings.length > 0 ? displayHearings.slice(0, 5).map(h => {
                      const c = cases.find(c => c.id === h.caseId);
                      return (
-                        <div key={h.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group">
+                        <div key={h.id} className={`p-4 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors flex items-center justify-between group ${todayHearings.some(th => th.id === h.id) ? 'ring-2 ring-amber-300 ring-opacity-50' : ''}`}>
                            <div className="flex items-center gap-4">
-                              <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-mono text-sm px-2 py-1 rounded font-bold">
-                                 {h.time || '09:00'}
+                              <div className="text-right">
+                                 <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-mono text-xs px-2 py-1 rounded font-bold mb-1">
+                                    {h.date}
+                                 </div>
+                                 <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 font-mono text-sm px-2 py-1 rounded font-bold">
+                                    {h.time || '09:00'}
+                                 </div>
                               </div>
                               <div>
                                  <h4 className="font-bold text-slate-800 dark:text-white text-sm cursor-pointer hover:text-primary-600 dark:hover:text-primary-400" onClick={() => c && onCaseClick && onCaseClick(c.id)}>{c?.title || 'قضية'}</h4>
                                  <p className="text-xs text-slate-500 dark:text-slate-400">{c?.court} • {c?.caseNumber}</p>
+                                 {todayHearings.some(th => th.id === h.id) && (
+                                    <span className="inline-flex items-center gap-1 ml-2 px-2 py-1 bg-amber-600 text-white text-xs rounded-full animate-pulse">
+                                       اليوم
+                                    </span>
+                                 )}
                               </div>
                            </div>
                            {!readOnly && (

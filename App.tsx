@@ -158,11 +158,29 @@ function App() {
         
         // Load user profile from Firestore
         try {
-          // Use dynamic import to avoid caching issues
           const { getUserProfile } = await import('./services/authService');
           const userProfile = await getUserProfile(user.uid);
+          
           if (userProfile) {
-            setCurrentUser(userProfile);
+            // Ensure user profile has required fields
+            if (!userProfile.id || !userProfile.name || !userProfile.email || !userProfile.permissions) {
+              // Create a complete user profile with required fields
+              const { getDefaultPermissions } = await import('./services/authService');
+              const completeProfile: AppUser = {
+                id: user.uid,
+                name: user.displayName || 'مستخدم',
+                email: user.email!,
+                username: user.email?.split('@')[0] || 'user',
+                roleLabel: 'مستخدم',
+                isActive: true,
+                permissions: getDefaultPermissions(),
+                lastLogin: userProfile.lastLogin || new Date().toISOString()
+              };
+              
+              setCurrentUser(completeProfile);
+            } else {
+              setCurrentUser(userProfile);
+            }
           } else {
             // Check if this is the admin user
             if (user.email === 'admin@mizan.com') {
@@ -195,31 +213,22 @@ function App() {
               };
               setCurrentUser(adminProfile);
             } else {
-              // Create default user profile if not exists
-              const defaultProfile: AppUser = {
-                id: user.uid,
-                name: user.displayName || user.email?.split('@')[0] || 'مستخدم',
-                email: user.email!,
-                username: user.email?.split('@')[0] || 'user',
-                roleLabel: 'مستخدم',
-                isActive: true,
-                permissions: getDefaultPermissions(),
-                lastLogin: new Date().toISOString()
-              };
-              
-              // Save to Firestore
-              await setDoc(doc(db, 'users', user.uid), defaultProfile);
-              setCurrentUser(defaultProfile);
+            // User doesn't exist in Firestore - show error and reset current user
+            setCurrentUser(null);
+            setError('المستخدم غير موجود في النظام. يرجى التواصل مع المدير لإنشاء حسابك.');
+            setLoading(false); // Reset loading state
             }
           }
         } catch (error) {
           console.error('Error loading user profile:', error);
+          setError('فشل في تحميل بيانات المستخدم');
+          setLoading(false); // Reset loading state
         }
       } else {
         setAuthUser(null);
-        setIsAuthenticated(false);
         setCurrentUser(null);
-        setLoading(false); // Stop loading when logged out
+        setIsAuthenticated(false);
+        setError(null);
       }
     });
 
@@ -254,6 +263,17 @@ function App() {
             getAppointments()
           ]);
           
+          // Set the data to state
+          setCases(casesData || []);
+          setClients(clientsData || []);
+          setHearings(hearingsData || []);
+          setTasks(tasksData || []);
+          setAppointments(appointmentsData || []);
+          setActivities(activitiesData || []);
+          setUsers(usersData || []);
+          setLawyers(lawyersData || []);
+          setReferences([]);
+          
           // Cache the data for offline use
           await Promise.all([
             offlineManager.cacheData('cases', casesData),
@@ -264,39 +284,9 @@ function App() {
           ]);
         } else {
           // Offline: Load from cache
-          [casesData, clientsData, hearingsData, tasksData, appointmentsData] = await Promise.all([
-            offlineManager.getCachedData('cases'),
-            offlineManager.getCachedData('clients'),
-            offlineManager.getCachedData('hearings'),
-            offlineManager.getCachedData('tasks'),
-            offlineManager.getCachedData('appointments')
-          ]);
-          
-          activitiesData = [];
-          usersData = [];
-          lawyersData = [];
-        }
-        
-        setCases(casesData || []);
-        setHearings(hearingsData || []);
-        setClients(clientsData || []);
-        setTasks(tasksData || []);
-        setAppointments(appointmentsData || []);
-        setActivities(activitiesData || []);
-        setUsers(usersData || []);
-        setLawyers(lawyersData || []);
-        // References will be loaded separately in LegalReferences page
-        setReferences([]);
-        
-      } catch (err) {
-        console.error('Error loading data:', err);
-        
-        // Try to load from cache if online loading fails
-        if (navigator.onLine) {
           try {
-            const [casesData, clientsData, hearingsData, tasksData, appointmentsData] = await Promise.all([
+            const [casesData, hearingsData, clientsData, tasksData, appointmentsData] = await Promise.all([
               offlineManager.getCachedData('cases'),
-              offlineManager.getCachedData('clients'),
               offlineManager.getCachedData('hearings'),
               offlineManager.getCachedData('tasks'),
               offlineManager.getCachedData('appointments')
@@ -316,9 +306,9 @@ function App() {
           } catch (cacheError) {
             setError('فشل في تحميل البيانات من قاعدة البيانات والتخزين المؤقت');
           }
-        } else {
-          setError('فشل في تحميل البيانات من قاعدة البيانات');
         }
+      } catch (error) {
+        setError('فشل في تحميل البيانات من قاعدة البيانات');
       } finally {
         setLoading(false);
       }
@@ -2279,6 +2269,18 @@ function App() {
             >
               إعادة المحاولة
             </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Wait for user data to be loaded before checking permissions
+    if (!currentUser) {
+      return (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-center">
+            <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-slate-600 dark:text-slate-400">جاري تحميل بيانات المستخدم...</p>
           </div>
         </div>
       );

@@ -35,7 +35,21 @@ export default defineConfig(({ mode }) => {
         }
       },
       build: {
-        chunkSizeWarningLimit: 2500
+        chunkSizeWarningLimit: 2500,
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              // Firebase modules
+              'firebase': ['firebase/app', 'firebase/firestore', 'firebase/auth', 'firebase/storage'],
+              // Large UI components
+              'document-generator': ['./pages/DocumentGenerator.tsx'],
+              'ai-assistant': ['./pages/AIAssistant.tsx'],
+              'settings': ['./pages/Settings.tsx'],
+              // Utilities
+              'utils': ['./services/authService.ts', './services/dbService.ts', './services/offlineManager.ts']
+            }
+          }
+        }
       },
       optimizeDeps: {
         include: ['firebase', '@firebase/*']
