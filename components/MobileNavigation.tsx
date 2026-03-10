@@ -45,6 +45,7 @@ interface MobileNavigationProps {
   theme?: 'light' | 'dark' | 'auto';
   customNavItems?: NavItem[];
   pinnedItems?: string[];
+  onNotificationsToggle?: () => void;
 }
 
 const MobileNavigationComponent: React.FC<MobileNavigationProps> = ({ 
@@ -55,7 +56,8 @@ const MobileNavigationComponent: React.FC<MobileNavigationProps> = ({
   onLogout, 
   theme = 'auto', 
   customNavItems = [], 
-  pinnedItems = [] 
+  pinnedItems = [],
+  onNotificationsToggle
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -423,7 +425,7 @@ const MobileNavigationComponent: React.FC<MobileNavigationProps> = ({
             {/* Notifications Button - Check permissions */}
             {canAccessNotifications(currentUser) && (
               <button
-                onClick={() => handleNavigate('notifications')}
+                onClick={onNotificationsToggle || (() => handleNavigate('notifications'))}
                 className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-300 ease-in-out"
                 aria-label="الإشعارات"
                 role="button"

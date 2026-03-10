@@ -162,62 +162,87 @@ function App() {
           const userProfile = await getUserProfile(user.uid);
           
           if (userProfile) {
-            // Ensure user profile has required fields
-            if (!userProfile.id || !userProfile.name || !userProfile.email || !userProfile.permissions) {
-              // Create a complete user profile with required fields
+            // Log the original user profile for debugging
+            console.log('🔍 Original user profile from Firestore:', {
+              userId: userProfile.id,
+              hasId: !!userProfile.id,
+              hasName: !!userProfile.name,
+              hasEmail: !!userProfile.email,
+              hasPermissions: !!userProfile.permissions,
+              permissionsCount: userProfile.permissions?.length || 0,
+              permissions: userProfile.permissions
+            });
+            
+            // Check if user profile has valid data (not just lastLogin)
+            if (!userProfile.id || !userProfile.name || !userProfile.email || !userProfile.permissions || userProfile.permissions.length === 0) {
+              console.log('⚠️ User profile is incomplete or missing basic data, creating complete profile...');
+              console.log('📋 Current profile data:', userProfile);
+              
+              // Create a complete user profile using Firebase Auth data
+              // IMPORTANT: Use permissions from Firebase or default permissions
               const { getDefaultPermissions } = await import('./services/authService');
+              
+              // Use existing permissions if available, otherwise use default permissions
+              const permissions = (userProfile.permissions && userProfile.permissions.length > 0) 
+                ? userProfile.permissions 
+                : getDefaultPermissions();
+              
               const completeProfile: AppUser = {
                 id: user.uid,
-                name: user.displayName || 'مستخدم',
+                name: user.displayName || user.email?.split('@')[0] || 'مستخدم',
                 email: user.email!,
                 username: user.email?.split('@')[0] || 'user',
-                roleLabel: 'مستخدم',
-                isActive: true,
-                permissions: getDefaultPermissions(),
-                lastLogin: userProfile.lastLogin || new Date().toISOString()
+                roleLabel: userProfile.roleLabel || 'مستخدم',
+                isActive: userProfile.isActive !== undefined ? userProfile.isActive : true,
+                // IMPORTANT: Use the permissions from Firebase or default permissions
+                permissions: permissions,
+                // Preserve any existing profile data
+                avatar: userProfile.avatar,
+                passwordExpiry: userProfile.passwordExpiry,
+                passwordHistory: userProfile.passwordHistory,
+                mustChangePassword: userProfile.mustChangePassword,
+                twoFactorEnabled: userProfile.twoFactorEnabled,
+                twoFactorSecret: userProfile.twoFactorSecret,
+                backupCodes: userProfile.backupCodes,
+                trustedDevices: userProfile.trustedDevices,
+                failedLoginAttempts: userProfile.failedLoginAttempts,
+                lockedUntil: userProfile.lockedUntil,
+                securityQuestions: userProfile.securityQuestions
               };
+              
+              // Save the complete profile to Firestore
+              try {
+                const { updateAppUser } = await import('./services/dbService');
+                await updateAppUser(completeProfile.id, completeProfile);
+                console.log('✅ Created and saved user profile:', {
+                  userId: completeProfile.id,
+                  permissionsCount: completeProfile.permissions.length,
+                  roleLabel: completeProfile.roleLabel,
+                  hasExistingPermissions: userProfile.permissions && userProfile.permissions.length > 0,
+                  restoredOriginalPermissions: userProfile.permissions && userProfile.permissions.length > 0,
+                  permissionsType: completeProfile.roleLabel || 'مستخدم',
+                  allPermissions: completeProfile.permissions.map(p => `${p.moduleId}:${p.access}`)
+                });
+              } catch (saveError) {
+                console.warn('⚠️ Could not save complete profile to Firestore:', saveError);
+              }
               
               setCurrentUser(completeProfile);
             } else {
+              // Profile is complete, use it as-is
               setCurrentUser(userProfile);
+              console.log('✅ Using complete user profile from Firebase:', {
+                userId: userProfile.id,
+                permissionsCount: userProfile.permissions.length,
+                roleLabel: userProfile.roleLabel,
+                permissions: userProfile.permissions
+              });
             }
           } else {
-            // Check if this is the admin user
-            if (user.email === 'admin@mizan.com') {
-              const adminProfile: AppUser = {
-                id: 'admin-user-123',
-                name: 'مدير النظام',
-                email: user.email!,
-                username: 'admin',
-                roleLabel: 'مدير النظام',
-                isActive: true,
-                permissions: [
-                  { moduleId: 'dashboard', access: 'write' as const },
-                  { moduleId: 'cases', access: 'write' as const },
-                  { moduleId: 'clients', access: 'write' as const },
-                  { moduleId: 'hearings', access: 'write' as const },
-                  { moduleId: 'tasks', access: 'write' as const },
-                  { moduleId: 'appointments', access: 'write' as const },
-                  { moduleId: 'documents', access: 'write' as const },
-                  { moduleId: 'fees', access: 'write' as const },
-                  { moduleId: 'expenses', access: 'write' as const },
-                  { moduleId: 'reports', access: 'write' as const },
-                  { moduleId: 'settings', access: 'write' as const },
-                  { moduleId: 'ai-assistant', access: 'write' as const },
-                  { moduleId: 'references', access: 'write' as const },
-                  { moduleId: 'locations', access: 'write' as const },
-                  { moduleId: 'calculators', access: 'write' as const },
-                  { moduleId: 'generator', access: 'write' as const }
-                ],
-                lastLogin: new Date().toISOString()
-              };
-              setCurrentUser(adminProfile);
-            } else {
             // User doesn't exist in Firestore - show error and reset current user
             setCurrentUser(null);
             setError('المستخدم غير موجود في النظام. يرجى التواصل مع المدير لإنشاء حسابك.');
             setLoading(false); // Reset loading state
-            }
           }
         } catch (error) {
           console.error('Error loading user profile:', error);
@@ -462,19 +487,10 @@ function App() {
       const user = await loginUser(email, password);
       console.log('Login successful, user:', user);
       
-      // Update user's last login in Firestore
-      try {
-        console.log('Updating last login for user:', user.uid);
-        await setDoc(doc(db, 'users', user.uid), {
-          lastLogin: new Date().toISOString()
-        }, { merge: true });
-        console.log('Last login updated successfully');
-      } catch (updateError) {
-        console.warn('Failed to update last login:', updateError);
-        // Don't fail login if last login update fails
-      }
+      // Note: lastLogin update removed to prevent data corruption
+      // Firebase Auth state change will handle user profile loading
       
-      return true;
+      return true; // Return success
     } catch (error: any) {
       console.error('Login error:', error);
       console.error('Error details:', {
@@ -483,7 +499,7 @@ function App() {
         stack: error.stack
       });
       
-      // Re-throw the error to be handled by the Login component
+      // Re-throw error to be handled by the Login component
       throw error;
     }
   };

@@ -104,13 +104,50 @@ export const resetPassword = async (email: string): Promise<void> => {
 
 export const getUserProfile = async (uid: string): Promise<AppUser | null> => {
   try {
+    console.log('🔍 Getting user profile for UID:', uid);
     const userDoc = await getDoc(doc(db, 'users', uid));
+    console.log('📄 User doc exists:', userDoc.exists());
     if (userDoc.exists()) {
-      return userDoc.data() as AppUser;
+      const rawData = userDoc.data();
+      console.log('📋 Raw data from Firestore:', rawData);
+      
+      // Convert Firestore data to AppUser format
+      const userData: AppUser = {
+        id: rawData.id || uid,
+        name: rawData.name || '',
+        email: rawData.email || '',
+        username: rawData.username || '',
+        roleLabel: rawData.roleLabel || 'مستخدم',
+        isActive: rawData.isActive !== undefined ? rawData.isActive : true,
+        permissions: rawData.permissions || [],
+        lastLogin: rawData.lastLogin,
+        avatar: rawData.avatar,
+        passwordExpiry: rawData.passwordExpiry,
+        passwordHistory: rawData.passwordHistory,
+        mustChangePassword: rawData.mustChangePassword,
+        twoFactorEnabled: rawData.twoFactorEnabled,
+        twoFactorSecret: rawData.twoFactorSecret,
+        backupCodes: rawData.backupCodes,
+        trustedDevices: rawData.trustedDevices,
+        failedLoginAttempts: rawData.failedLoginAttempts,
+        lockedUntil: rawData.lockedUntil,
+        securityQuestions: rawData.securityQuestions
+      };
+      
+      console.log('👤 Formatted user profile data:', {
+        id: userData.id,
+        name: userData.name,
+        email: userData.email,
+        hasPermissions: !!userData.permissions,
+        permissionsCount: userData.permissions?.length || 0,
+        permissions: userData.permissions
+      });
+      return userData;
     }
+    console.log('❌ No user profile found for UID:', uid);
     return null;
   } catch (error) {
-    console.error('Error getting user profile:', error);
+    console.error('❌ Error getting user profile:', error);
     throw new Error('فشل في جلب بيانات المستخدم');
   }
 };

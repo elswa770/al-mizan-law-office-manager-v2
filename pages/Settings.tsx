@@ -4085,7 +4085,7 @@ const Settings: React.FC<SettingsProps> = ({
     }
   };
 
-  const handleSaveUser = (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
 
@@ -4095,24 +4095,45 @@ const Settings: React.FC<SettingsProps> = ({
     }
 
     if (editingUser && onUpdateUser) {
+      // Update existing user
       const updatedUser = { ...editingUser, ...formData };
       if (!formData.password) {
          updatedUser.password = editingUser.password;
       }
       onUpdateUser(updatedUser as AppUser);
     } else if (onAddUser) {
-      const newUser: AppUser = {
-        id: Math.random().toString(36).substring(2, 9),
+      // Add new user - let the backend handle ID generation
+      const newUser: Omit<AppUser, 'id'> = {
         name: formData.name!,
         email: formData.email!,
-        username: formData.username,
-        password: formData.password,
+        username: formData.username || formData.email!.split('@')[0],
+        password: formData.password!,
         roleLabel: formData.roleLabel || 'موظف',
-        isActive: formData.isActive || true,
+        isActive: formData.isActive !== undefined ? formData.isActive : true,
         permissions: formData.permissions || [],
-        avatar: formData.avatar || ''
+        avatar: formData.avatar || '',
+        // Security fields with defaults
+        passwordExpiry: null,
+        passwordHistory: [],
+        mustChangePassword: false,
+        twoFactorEnabled: false,
+        twoFactorSecret: '',
+        backupCodes: [],
+        trustedDevices: [],
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        securityQuestions: []
       };
-      onAddUser(newUser);
+      
+      console.log('🔍 Adding new user with data:', {
+        name: newUser.name,
+        email: newUser.email,
+        roleLabel: newUser.roleLabel,
+        permissionsCount: newUser.permissions.length,
+        isActive: newUser.isActive
+      });
+      
+      onAddUser(newUser as AppUser);
     }
     setIsUserModalOpen(false);
   };

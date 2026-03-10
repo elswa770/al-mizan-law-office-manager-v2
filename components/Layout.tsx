@@ -320,6 +320,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activePage, onNavigate, notif
         currentUser={currentUser}
         notificationsCount={notifications.length}
         onLogout={onLogout}
+        onNotificationsToggle={() => setIsNotificationsOpen(!isNotificationsOpen)}
       />
 
       {/* --- Sidebar (Desktop & Mobile) --- */}
