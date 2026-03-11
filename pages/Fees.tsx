@@ -753,12 +753,12 @@ ${typeLabel}
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">متابعة دقيقة للأتعاب، المدفوعات، ومصروفات القضايا</p>
         </div>
         <div className="flex gap-2">
-           <button 
+           {!readOnly && (canViewIncome || canViewExpenses) && <button 
              onClick={() => setIsTransactionModalOpen(true)}
              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shadow-sm transition-colors"
            >
              <Plus className="w-4 h-4" /> تسجيل معاملة
-           </button>
+           </button>}
            {canViewIncome && (
              <button className="bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors">
                تصدير تقرير
@@ -825,7 +825,8 @@ ${typeLabel}
                     value={filterStatus}
                     onChange={(e) => setFilterStatus(e.target.value as any)}
                     className="bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm rounded-lg p-2 focus:outline-none focus:border-emerald-500"
-                 >
+                    disabled={readOnly}
+                  >
                     <option value="all">جميع الحالات</option>
                     <option value="completed">خالص السداد</option>
                     <option value="debt">علية مديونية</option>
@@ -875,12 +876,12 @@ ${typeLabel}
                              {c.financials.remaining > 0 ? c.financials.remaining.toLocaleString() : '0'}
                           </td>
                           <td className="p-4">
-                             <button 
+                             {!readOnly && canViewIncome && <button 
                                onClick={(e) => { e.stopPropagation(); openTransactionModal(c.id); }}
                                className="text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 p-2 rounded-lg transition-colors flex items-center gap-1 font-bold text-xs"
                              >
                                 <Plus className="w-3 h-3" /> إضافة دفعة
-                             </button>
+                             </button>}
                           </td>
                        </tr>
                     ))}
@@ -973,6 +974,7 @@ ${typeLabel}
                         className="w-full border border-slate-300 dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white"
                         value={transactionData.caseId}
                         onChange={e => setTransactionData({...transactionData, caseId: e.target.value})}
+                        disabled={readOnly || (!canViewIncome && !canViewExpenses)}
                      >
                         <option value="">اختر القضية...</option>
                         {cases.map(c => (
@@ -991,6 +993,7 @@ ${typeLabel}
                         className="w-full border border-slate-300 dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white"
                         value={transactionData.amount}
                         onChange={e => setTransactionData({...transactionData, amount: Number(e.target.value)})}
+                        disabled={readOnly || (!canViewIncome && !canViewExpenses)}
                      />
                   </div>
 
@@ -1005,6 +1008,7 @@ ${typeLabel}
                                  type="button"
                                  onClick={() => setTransactionData({...transactionData, method: method as PaymentMethod})}
                                  className={`p-2 rounded border text-xs font-bold flex items-center justify-center gap-2 ${transactionData.method === method ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                                 disabled={readOnly || !canViewIncome}
                               >
                                  {getMethodIcon(method)}
                                  {getMethodLabel(method)}
@@ -1022,6 +1026,7 @@ ${typeLabel}
                            className="w-full border border-slate-300 dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white"
                            value={transactionData.category}
                            onChange={e => setTransactionData({...transactionData, category: e.target.value})}
+                           disabled={readOnly || !canViewExpenses}
                         >
                            <option value="">اختر...</option>
                            <option value="رسوم">رسوم قضائية</option>
@@ -1042,16 +1047,17 @@ ${typeLabel}
                         placeholder={transactionData.type === 'payment' ? 'دفعة من حساب الأتعاب' : 'تفاصيل المصروف'}
                         value={transactionData.description}
                         onChange={e => setTransactionData({...transactionData, description: e.target.value})}
+                        disabled={readOnly || (transactionData.type === 'payment' && !canViewIncome) || (transactionData.type === 'expense' && !canViewExpenses)}
                      />
                   </div>
 
-                  <button 
+                  {!readOnly && ((transactionData.type === 'payment' && canViewIncome) || (transactionData.type === 'expense' && canViewExpenses)) && <button 
                      type="submit" 
                      className={`w-full py-3 rounded-lg text-white font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 mt-4 ${transactionData.type === 'payment' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200 dark:shadow-none' : 'bg-red-600 hover:bg-red-700 shadow-red-200 dark:shadow-none'}`}
                   >
                      {transactionData.type === 'payment' ? <Plus className="w-5 h-5" /> : <CreditCard className="w-5 h-5" />}
                      {transactionData.type === 'payment' ? 'إضافة الدفعة' : 'تسجيل المصروف'}
-                  </button>
+                  </button>}
                </form>
             </div>
          </div>

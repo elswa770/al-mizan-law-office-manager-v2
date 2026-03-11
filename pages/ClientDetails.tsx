@@ -377,9 +377,11 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
         {/* Profile Card */}
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
            <div className={`h-24 ${client.status === ClientStatus.ACTIVE ? 'bg-slate-800' : 'bg-slate-400'} relative`}>
+              {!readOnly && (
               <button onClick={handleOpenEdit} className="absolute top-3 left-3 p-1.5 bg-white/20 hover:bg-white/40 rounded text-white transition-colors">
                  <Edit3 className="w-4 h-4" />
               </button>
+              )}
            </div>
            <div className="px-6 pb-6 -mt-10 relative">
               <div className="flex justify-between items-end mb-4">
@@ -428,12 +430,16 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
               </div>
 
               <div className="grid grid-cols-2 gap-2 mt-6">
+                 {!readOnly && (
                  <button onClick={() => handleCall(client.phone)} className="flex items-center justify-center gap-2 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 text-sm font-medium transition-colors">
                     <PhoneCall className="w-4 h-4" /> اتصال
                  </button>
+                 )}
+                 {!readOnly && (
                  <button onClick={() => setIsMsgModalOpen(true)} className="flex items-center justify-center gap-2 py-2 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-lg hover:bg-green-100 dark:hover:bg-green-900/50 text-sm font-medium transition-colors">
                     <MessageCircle className="w-4 h-4" /> واتساب
                  </button>
+                 )}
               </div>
            </div>
         </div>
@@ -543,7 +549,7 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
            <div className="flex justify-between items-center mb-4">
               <h3 className="font-bold text-slate-800 dark:text-white">ملاحظات عامة</h3>
-              <button onClick={handleOpenEdit} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><Edit3 className="w-4 h-4"/></button>
+              {!readOnly && <button onClick={handleOpenEdit} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><Edit3 className="w-4 h-4"/></button>}
            </div>
            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
               {client.notes || 'لا توجد ملاحظات مسجلة.'}
@@ -557,7 +563,7 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                  <Calendar className="w-4 h-4" />
                  تاريخ انتهاء التوكيل
               </h3>
-              <button onClick={handleOpenEdit} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><Edit3 className="w-4 h-4"/></button>
+              {!readOnly && <button onClick={handleOpenEdit} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><Edit3 className="w-4 h-4"/></button>}
            </div>
            <div className="flex items-center gap-3">
               <Calendar className="w-5 h-5 text-slate-400" />
@@ -642,9 +648,9 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
      <div className="space-y-4 animate-in fade-in">
         <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
            <h3 className="font-bold text-slate-800 dark:text-white">المستندات القانونية</h3>
-           <button onClick={() => setIsDocModalOpen(true)} className="bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-primary-700 flex items-center gap-2">
+           {!readOnly && <button onClick={() => setIsDocModalOpen(true)} className="bg-primary-600 text-white px-3 py-1.5 rounded-lg text-sm font-bold hover:bg-primary-700 flex items-center gap-2">
               <Upload className="w-4 h-4" /> رفع مستند
-           </button>
+           </button>}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -869,12 +875,12 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
 
                   <div className="flex gap-2 pt-2">
                      <button onClick={() => setIsMsgModalOpen(false)} className="flex-1 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">إلغاء</button>
-                     <button 
+                     {!readOnly && <button 
                         onClick={openWhatsApp}
                         className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-100 dark:shadow-none transition-all"
                      >
                         <Send className="w-4 h-4" /> إرسال عبر واتساب
-                     </button>
+                     </button>}
                   </div>
                </div>
             </div>
@@ -889,19 +895,19 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
               <form onSubmit={handleSaveClient} className="space-y-4">
                  <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الاسم</label>
-                    <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" required />
+                    <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" required disabled={readOnly} />
                  </div>
                  <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">نوع الموكل</label>
-                        <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as any})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white">
+                        <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value as any})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" disabled={readOnly}>
                            <option value={ClientType.INDIVIDUAL}>فرد</option>
                            <option value={ClientType.COMPANY}>شركة</option>
                         </select>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الحالة</label>
-                        <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white">
+                        <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value as any})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" disabled={readOnly}>
                            <option value={ClientStatus.ACTIVE}>نشط</option>
                            <option value={ClientStatus.INACTIVE}>موقوف</option>
                         </select>
@@ -909,13 +915,13 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                  </div>
                  <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">الرقم القومي / السجل</label>
-                    <input type="text" value={formData.nationalId} onChange={e => setFormData({...formData, nationalId: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" required />
+                    <input type="text" value={formData.nationalId} onChange={e => setFormData({...formData, nationalId: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" required disabled={readOnly} />
                  </div>
                  <div className="grid grid-cols-2 gap-4">
-                    <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="رقم الهاتف" required dir="ltr"/>
-                    <input type="email" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} className="border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="البريد الإلكتروني" dir="ltr"/>
+                    <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="رقم الهاتف" required dir="ltr" disabled={readOnly} />
+                    <input type="email" value={formData.email || ''} onChange={e => setFormData({...formData, email: e.target.value})} className="border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="البريد الإلكتروني" dir="ltr" disabled={readOnly} />
                  </div>
-                 <input type="text" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="العنوان" />
+                 <input type="text" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="العنوان" disabled={readOnly} />
                  <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">تاريخ انتهاء التوكيل</label>
                     <input 
@@ -923,13 +929,14 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                        value={formData.poaExpiry ? new Date(formData.poaExpiry).toISOString().split('T')[0] : ''} 
                        onChange={e => setFormData({...formData, poaExpiry: e.target.value})} 
                        className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                       disabled={readOnly}
                     />
                  </div>
-                 <textarea value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="ملاحظات..." rows={3}></textarea>
+                 <textarea value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="ملاحظات..." rows={3} disabled={readOnly}></textarea>
                  
                  <div className="flex gap-2 pt-2">
                     <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 p-2 rounded-lg">إلغاء</button>
-                    <button type="submit" className="flex-1 bg-primary-600 text-white p-2 rounded-lg">حفظ</button>
+                    {!readOnly && <button type="submit" className="flex-1 bg-primary-600 text-white p-2 rounded-lg">حفظ</button>}
                  </div>
               </form>
            </div>
@@ -942,7 +949,7 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md p-6">
                <h3 className="font-bold text-lg mb-4 text-slate-800 dark:text-white">إضافة مستند جديد</h3>
                <div className="space-y-3">
-                  <select value={newDocData.type} onChange={e => setNewDocData({...newDocData, type: e.target.value as any})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white">
+                  <select value={newDocData.type} onChange={e => setNewDocData({...newDocData, type: e.target.value as any})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" disabled={readOnly}>
                      <option value="national_id">بطاقة رقم قومي</option>
                      <option value="poa">توكيل</option>
                      <option value="commercial_register">سجل تجاري</option>
@@ -960,6 +967,7 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                               className="w-full border p-1.5 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-sm"
                               value={newDocData.issueDate || ''}
                               onChange={e => setNewDocData({...newDocData, issueDate: e.target.value})}
+                              disabled={readOnly}
                            />
                         </div>
                         <div>
@@ -969,6 +977,7 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                               className="w-full border p-1.5 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white text-sm"
                               value={newDocData.expiryDate || ''}
                               onChange={e => setNewDocData({...newDocData, expiryDate: e.target.value})}
+                              disabled={readOnly}
                            />
                         </div>
                         <div className="col-span-2 text-[10px] text-amber-600 dark:text-amber-500">
@@ -977,8 +986,8 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                      </div>
                   )}
 
-                  <input type="text" placeholder="اسم المستند (مثال: توكيل عام 2024)" value={newDocData.name} onChange={e => setNewDocData({...newDocData, name: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                  <textarea placeholder="ملاحظات..." value={newDocData.notes || ''} onChange={e => setNewDocData({...newDocData, notes: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" rows={2}></textarea>
+                  <input type="text" placeholder="اسم المستند (مثال: توكيل عام 2024)" value={newDocData.name} onChange={e => setNewDocData({...newDocData, name: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" disabled={readOnly} />
+                  <textarea placeholder="ملاحظات..." value={newDocData.notes || ''} onChange={e => setNewDocData({...newDocData, notes: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" rows={2} disabled={readOnly}></textarea>
                   
                   {/* Google Drive Upload Option */}
                   <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
@@ -988,6 +997,7 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                            checked={newDocData.uploadToDrive || false} 
                            onChange={e => setNewDocData({...newDocData, uploadToDrive: e.target.checked})}
                            className="w-4 h-4 text-blue-600 rounded border-blue-300 focus:ring-blue-500"
+                           disabled={readOnly}
                         />
                         <div className="flex items-center gap-2">
                            <Cloud className="w-4 h-4 text-blue-600" />
@@ -1013,7 +1023,7 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                </div>
                <div className="flex gap-2 mt-4">
                   <button onClick={() => setIsDocModalOpen(false)} className="flex-1 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 p-2 rounded-lg">إلغاء</button>
-                  <button 
+                  {!readOnly && <button 
                      onClick={handleSaveDocument} 
                      disabled={!selectedFile || !newDocData.name || isUploadingToDrive} 
                      className="flex-1 bg-primary-600 text-white p-2 rounded-lg disabled:opacity-50 flex items-center justify-center gap-2"
@@ -1029,7 +1039,7 @@ const ClientDetails: React.FC<ClientDetailsProps> = ({ clientId, clients, cases,
                            <span>رفع المستند</span>
                         </>
                      )}
-                  </button>
+                  </button>}
                </div>
             </div>
          </div>

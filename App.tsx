@@ -2419,6 +2419,7 @@ function App() {
           onAddActivity={handleAddActivity}
           canViewIncome={hasAccess('fees')}
           canViewExpenses={hasAccess('expenses')}
+          readOnly={isReadOnly('fees') || isReadOnly('expenses')}
         />;
       case 'reports':
         return <Reports 

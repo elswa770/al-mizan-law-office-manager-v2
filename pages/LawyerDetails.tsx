@@ -299,16 +299,16 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
           </div>
         </div>
         {!readOnly && (
-          <button
-            onClick={handleEditLawyer}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
-            title="تعديل بيانات المحامي"
-          >
-            <Edit className="w-4 h-4" />
-            تعديل
-          </button>
-        )}
-      </div>
+              <button
+                onClick={handleEditLawyer}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                title="تعديل بيانات المحامي"
+              >
+                <Edit className="w-4 h-4" />
+                تعديل
+              </button>
+            )}
+        </div>
 
       {/* Tabs */}
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-1">
@@ -559,9 +559,9 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">كارنية النقابة، البطاقة الشخصية، الشهادات، والعقود</p>
             </div>
-            <button onClick={() => setIsDocModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm shadow-indigo-200 dark:shadow-none">
+            {!readOnly && <button onClick={() => setIsDocModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm shadow-indigo-200 dark:shadow-none">
               <Upload className="w-4 h-4" /> رفع مستند
-            </button>
+            </button>}
           </div>
 
           {lawyer.documents && lawyer.documents.length > 0 ? (
@@ -607,7 +607,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
             <div className="p-12 text-center bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 flex flex-col items-center gap-3">
               <FileCheck className="w-12 h-12 opacity-20" />
               <p>لا توجد مستندات مرفقة لهذا المحامي</p>
-              <button onClick={() => setIsDocModalOpen(true)} className="text-indigo-600 dark:text-indigo-400 font-bold text-sm hover:underline">اضغط لرفع أول مستند</button>
+              {!readOnly && <button onClick={() => setIsDocModalOpen(true)} className="text-indigo-600 dark:text-indigo-400 font-bold text-sm hover:underline">اضغط لرفع أول مستند</button>}
             </div>
           )}
         </div>
@@ -636,6 +636,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     value={editedLawyer.name}
                     onChange={e => handleInputChange('name', e.target.value)}
+                    disabled={readOnly}
                   />
                 </div>
                 <div>
@@ -646,6 +647,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     value={editedLawyer.phone}
                     onChange={e => handleInputChange('phone', e.target.value)}
+                    disabled={readOnly}
                   />
                 </div>
                 <div>
@@ -655,6 +657,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     value={editedLawyer.email || ''}
                     onChange={e => handleInputChange('email', e.target.value)}
+                    disabled={readOnly}
                   />
                 </div>
                 <div>
@@ -664,6 +667,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     value={editedLawyer.barNumber || ''}
                     onChange={e => handleInputChange('barNumber', e.target.value)}
+                    disabled={readOnly}
                   />
                 </div>
                 <div>
@@ -674,6 +678,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     value={editedLawyer.barRegistrationNumber || ''}
                     onChange={e => handleInputChange('barRegistrationNumber', e.target.value)}
                     placeholder="أدخل رقم القيد في النقابة"
+                    disabled={readOnly}
                   />
                 </div>
                 <div>
@@ -682,6 +687,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     value={editedLawyer.barLevel || ''}
                     onChange={e => handleInputChange('barLevel', e.target.value)}
+                    disabled={readOnly}
                   >
                     <option value="">اختر درجة القيد</option>
                     <option value="general">جدول عام</option>
@@ -698,6 +704,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     value={editedLawyer.officeLocation || ''}
                     onChange={e => handleInputChange('officeLocation', e.target.value)}
                     placeholder="أدخل موقع المكتب"
+                    disabled={readOnly}
                   />
                 </div>
                 <div>
@@ -707,6 +714,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     value={editedLawyer.hourlyRate || 0}
                     onChange={e => handleInputChange('hourlyRate', parseFloat(e.target.value))}
+                    disabled={readOnly}
                   />
                 </div>
                 <div>
@@ -716,6 +724,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     value={editedLawyer.specialization}
                     onChange={e => handleInputChange('specialization', e.target.value)}
+                    disabled={readOnly}
                   />
                 </div>
                 <div className="md:col-span-2">
@@ -739,12 +748,12 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                 >
                   إلغاء
                 </button>
-                <button 
+                {!readOnly && <button 
                   type="submit" 
                   className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-200 dark:shadow-none"
                 >
                   حفظ البيانات
-                </button>
+                </button>}
               </div>
             </form>
           </div>
@@ -775,6 +784,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                       onChange={handleFileSelect}
                       className="hidden"
                       accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      disabled={readOnly}
                     />
                     <Upload className="w-12 h-12 text-slate-400 mx-auto mb-4" />
                     <p className="text-sm text-slate-600 dark:text-slate-400 mb-2">
@@ -799,6 +809,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     onChange={e => setNewDocData({...newDocData, name: e.target.value})}
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                     placeholder="أدخل اسم المستند"
+                    disabled={readOnly}
                   />
                 </div>
                 
@@ -808,6 +819,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                     value={newDocData.documentType}
                     onChange={e => setNewDocData({...newDocData, documentType: e.target.value})}
                     className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                    disabled={readOnly}
                   >
                     <option value="cv">السيرة الذاتية</option>
                     <option value="certificate">شهادة</option>
@@ -824,6 +836,7 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                       className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                       checked={newDocData.uploadToDrive}
                       onChange={e => setNewDocData({...newDocData, uploadToDrive: e.target.checked})}
+                      disabled={readOnly}
                     />
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-300">رفع إلى Google Drive</span>
                   </label>
@@ -838,13 +851,13 @@ const LawyerDetails: React.FC<LawyerDetailsProps> = ({
                 >
                   إلغاء
                 </button>
-                <button
+                {!readOnly && <button
                   type="submit"
                   disabled={isUploadingToDrive}
                   className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-lg shadow-indigo-200 dark:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isUploadingToDrive ? 'جاري الرفع...' : 'رفع المستند'}
-                </button>
+                </button>}
               </div>
             </form>
           </div>

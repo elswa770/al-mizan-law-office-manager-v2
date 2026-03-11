@@ -774,13 +774,15 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                   <Briefcase className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                   ملخص واستراتيجية القضية
                 </div>
-                <button 
-                  onClick={handleEditOpen} 
-                  className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700"
-                  title="تعديل الاستراتيجية"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
+                {!readOnly && (
+                  <button 
+                    onClick={handleEditOpen} 
+                    className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors p-1 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700"
+                    title="تعديل الاستراتيجية"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                )}
              </h3>
              <div className="space-y-4">
                 <div>
@@ -917,12 +919,14 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
            <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
               <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400" /> سجل الجلسات
            </h3>
+           {!readOnly && (
            <button 
              onClick={() => setIsHearingModalOpen(true)}
              className="text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors flex items-center gap-1"
            >
               <Plus className="w-3 h-3" /> جلسة جديدة
            </button>
+           )}
         </div>
 
         <div className="relative border-r-2 border-slate-200 dark:border-slate-700 mr-4 space-y-8 pr-8">
@@ -943,7 +947,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                                <div className="flex gap-1 ml-auto">
                                  <button 
                                    onClick={() => {
-                                     console.log('Edit button clicked for hearing:', h);
+                                     setEditingHearing(h);
                                      handleOpenHearingModal(h);
                                    }} 
                                    className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded transition-all border border-transparent hover:border-indigo-200 dark:hover:border-indigo-700"
@@ -951,7 +955,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                                  >
                                    <Edit3 className="w-4 h-4" />
                                  </button>
-                                 {onDeleteHearing && (
+                                 {!readOnly && onDeleteHearing && (
                                    <button 
                                      onClick={() => {
                                        console.log('Delete button clicked for hearing:', h.id);
@@ -1001,9 +1005,11 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">العقود، الأحكام، المذكرات، والإعلانات</p>
            </div>
+           {!readOnly && (
            <button onClick={() => setIsDocModalOpen(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-sm shadow-indigo-200 dark:shadow-none">
               <Upload className="w-4 h-4" /> رفع مستند
            </button>
+           )}
         </div>
 
         {currentCase.documents && currentCase.documents.length > 0 ? (
@@ -1061,7 +1067,9 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
            <div className="p-12 text-center bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-400 dark:text-slate-500 flex flex-col items-center gap-3">
               <FileCheck className="w-12 h-12 opacity-20" />
               <p>لا توجد مستندات مرفقة في هذه القضية</p>
+              {!readOnly && (
               <button onClick={() => setIsDocModalOpen(true)} className="text-indigo-600 dark:text-indigo-400 font-bold text-sm hover:underline">اضغط لرفع أول مستند</button>
+              )}
            </div>
         )}
      </div>
@@ -1079,9 +1087,11 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                     <h3 className="text-xl font-bold text-slate-800 dark:text-white mt-1">{totalAgreed.toLocaleString()} <span className="text-xs font-normal">ج.م</span></h3>
                  </div>
                  <div className="flex items-start gap-1">
+                    {!readOnly && (
                     <button onClick={openFeesModal} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors">
                         <Edit className="w-3.5 h-3.5" />
                     </button>
+                    )}
                     <div className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-lg">
                         <Briefcase className="w-5 h-5" />
                     </div>
@@ -1161,12 +1171,14 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
               <h3 className="font-bold text-slate-800 dark:text-white text-sm flex items-center gap-2">
                  <Wallet className="w-4 h-4 text-slate-500" /> سجل المعاملات المالية
               </h3>
-              <button 
+              {!readOnly && (
+                <button 
                 onClick={() => setIsTransModalOpen(true)}
                 className="text-xs bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-white px-3 py-1.5 rounded-lg font-bold hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors flex items-center gap-1 shadow-sm"
               >
                  <Plus className="w-3 h-3" /> إضافة معاملة
               </button>
+              )}
            </div>
            
            <div className="max-h-80 overflow-y-auto">
@@ -1242,6 +1254,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                 </div>
              </div>
 
+             {!readOnly && (
              <div className="flex items-center gap-3 shrink-0">
                 <button 
                   onClick={handleEditOpen} 
@@ -1250,6 +1263,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                    <Edit3 className="w-4 h-4" /> تعديل
                 </button>
              </div>
+             )}
           </div>
        </div>
 
@@ -1424,7 +1438,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                  </div>
                  <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-700">
                     <button type="button" onClick={() => setIsEditModalOpen(false)} className="flex-1 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">إلغاء</button>
-                    <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 dark:shadow-none transition-colors">حفظ التعديلات</button>
+                    {!readOnly && <button type="submit" className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 dark:shadow-none transition-colors">حفظ التعديلات</button>}
                  </div>
               </form>
            </div>
@@ -1502,7 +1516,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                       )}
                    </div>
 
-                   <button type="submit" disabled={!newDocData.file || !newDocData.name || isUploadingToDrive} className="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2">
+                   {!readOnly && <button type="submit" disabled={!newDocData.file || !newDocData.name || isUploadingToDrive} className="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed mt-2 flex items-center justify-center gap-2">
                       {isUploadingToDrive ? (
                         <>
                           <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1514,7 +1528,7 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                           حفظ المستند
                         </>
                       )}
-                   </button>
+                   </button>}
                 </form>
              </div>
           </div>
@@ -1543,9 +1557,9 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                       <input type="text" value={transData.description} onChange={e => setTransData({...transData, description: e.target.value})} className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" placeholder="مثال: دفعة تحت الحساب" />
                    </div>
 
-                   <button type="submit" className={`w-full py-2 rounded-lg font-bold text-white mt-2 ${transData.type === 'payment' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                   {!readOnly && <button type="submit" className={`w-full py-2 rounded-lg font-bold text-white mt-2 ${transData.type === 'payment' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
                       حفظ المعاملة
-                   </button>
+                   </button>}
                 </form>
              </div>
           </div>
@@ -1569,9 +1583,9 @@ const CaseDetails: React.FC<CaseDetailsProps> = ({ caseId, cases, clients, lawye
                          className="w-full border p-2 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white" 
                       />
                    </div>
-                   <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 mt-2">
+                   {!readOnly && <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg font-bold hover:bg-blue-700 mt-2">
                       تحديث القيمة
-                   </button>
+                   </button>}
                 </form>
              </div>
           </div>
