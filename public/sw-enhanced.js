@@ -264,7 +264,19 @@ async function checkForUpdates() {
 
 // Handle messages from main thread
 self.addEventListener('message', event => {
+  // Validate event data before destructuring
+  if (!event.data || typeof event.data !== 'object') {
+    console.log('SW: Received invalid message data:', event.data);
+    return;
+  }
+  
   const { type, data } = event.data;
+  
+  // Skip if type is undefined or null
+  if (type === undefined || type === null) {
+    console.log('SW: Received message with undefined type, skipping:', event.data);
+    return;
+  }
   
   switch (type) {
     case 'SKIP_WAITING':
@@ -274,7 +286,9 @@ self.addEventListener('message', event => {
       cacheData(data);
       break;
     case 'GET_OFFLINE_STATUS':
-      event.ports[0].postMessage({ online: navigator.onLine });
+      if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage({ online: navigator.onLine });
+      }
       break;
     default:
       console.log('SW: Unknown message type:', type);

@@ -14,7 +14,7 @@ export const useOfflineStatus = (): OfflineStatus | null => {
     updateStatus();
     offlineManager.onStatusChange(setStatus);
 
-    const interval = setInterval(updateStatus, 5000); // Update every 5 seconds
+    const interval = setInterval(updateStatus, 30000); // Update every 30 seconds
 
     return () => {
       clearInterval(interval);
@@ -90,8 +90,8 @@ export const useOfflineActions = () => {
       }
     };
 
-    // Check every 5 seconds to avoid too frequent checks
-    const interval = setInterval(checkConnection, 5000);
+    // Check every 30 seconds to avoid too frequent checks and console spam
+    const interval = setInterval(checkConnection, 30000);
 
     // Initial check
     checkConnection();

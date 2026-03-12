@@ -174,7 +174,7 @@ const Settings: React.FC<SettingsProps> = ({
       const result = testFunction();
       return result;
     } catch (error) {
-      console.error(`❌ ${featureName} test: ERROR`, error);
+      // console.error(`❌ ${featureName} test: ERROR`, error);
       return false;
     }
   };
@@ -212,7 +212,7 @@ const Settings: React.FC<SettingsProps> = ({
             const currentUser = authInstance.currentUser;
             return currentUser !== null;
           } catch (error) {
-            console.error('Firebase connection test failed:', error);
+            // console.error('Firebase connection test failed:', error);
             return false;
           }
         }
@@ -274,7 +274,7 @@ const Settings: React.FC<SettingsProps> = ({
         await setDoc(doc(db, 'securityTestResults', testResults.id), testResults);
       }
     } catch (error) {
-      console.error('Failed to save test results to Firebase:', error);
+      // console.error('Failed to save test results to Firebase:', error);
     }
     
     return { passed, total, results };
@@ -295,7 +295,7 @@ const Settings: React.FC<SettingsProps> = ({
     };
     
     setSecurityActivity(prev => [activity, ...prev].slice(0, 100));
-    console.log(`🔐 Security Activity Logged: ${action}`);
+    // console.log(`🔐 Security Activity Logged: ${action}`);
   };
 
   const generateBackupCodes = (): string[] => {
@@ -395,11 +395,11 @@ const Settings: React.FC<SettingsProps> = ({
     try {
       await setDoc(doc(db, 'errorLogs', error.id), error);
     } catch (firebaseError) {
-      console.error('Failed to save error to Firebase:', firebaseError);
+      // console.error('Failed to save error to Firebase:', firebaseError);
     }
 
     // Also log to console
-    console.error(`[${level.toUpperCase()}] ${source}: ${message}`);
+    // console.error(`[${level.toUpperCase()}] ${source}: ${message}`);
   };
 
   const clearErrorLogs = async () => {
@@ -421,7 +421,7 @@ const Settings: React.FC<SettingsProps> = ({
         
         alert('✅ تم حذف سجلات الأخطاء بنجاح');
       } catch (error) {
-        console.error('Failed to clear error logs:', error);
+        // console.error('Failed to clear error logs:', error);
         alert('❌ فشل حذف سجلات الأخطاء');
       }
     }
@@ -439,7 +439,7 @@ const Settings: React.FC<SettingsProps> = ({
       
       alert('✅ تم تحديث حالة الخطأ');
     } catch (error) {
-      console.error('Failed to mark error as resolved:', error);
+      // console.error('Failed to mark error as resolved:', error);
       alert('❌ فشل تحديث حالة الخطأ');
     }
   };
@@ -461,7 +461,7 @@ const Settings: React.FC<SettingsProps> = ({
         
         setErrorLogs(logs);
       } catch (error) {
-        console.error('Failed to load error logs:', error);
+        // console.error('Failed to load error logs:', error);
       }
     };
 
@@ -471,31 +471,31 @@ const Settings: React.FC<SettingsProps> = ({
   // Firebase Helper Functions
   const saveSettingsToFirebase = async (collectionName: string, data: any) => {
     try {
-      console.log(`Saving to Firebase - Collection: ${collectionName}, Data:`, data);
+      // console.log(`Saving to Firebase - Collection: ${collectionName}, Data:`, data);
       await setDoc(doc(db, collectionName, 'main'), data);
-      console.log(`✅ Settings saved to Firebase: ${collectionName}`);
+      // console.log(`✅ Settings saved to Firebase: ${collectionName}`);
       return true;
     } catch (error) {
-      console.error(`❌ Error saving to Firebase (${collectionName}):`, error);
+      // console.error(`❌ Error saving to Firebase (${collectionName}):`, error);
       throw error;
     }
   };
 
   const loadSettingsFromFirebase = async (collectionName: string) => {
     try {
-      console.log(`Loading from Firebase - Collection: ${collectionName}`);
+      // console.log(`Loading from Firebase - Collection: ${collectionName}`);
       const docRef = doc(db, collectionName, 'main');
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
         const data = docSnap.data();
-        console.log(`✅ Settings loaded from Firebase (${collectionName}):`, data);
+        // console.log(`✅ Settings loaded from Firebase (${collectionName}):`, data);
         return data;
       } else {
-        console.log(`⚠️ No settings found in Firebase (${collectionName}), will use defaults`);
+        // console.log(`⚠️ No settings found in Firebase (${collectionName}), will use defaults`);
         return null;
       }
     } catch (error) {
-      console.error(`❌ Error loading from Firebase (${collectionName}):`, error);
+      // console.error(`❌ Error loading from Firebase (${collectionName}):`, error);
       return null;
     }
   };
@@ -509,10 +509,10 @@ const Settings: React.FC<SettingsProps> = ({
         uploadedAt: new Date().toISOString(),
         filename: filename
       });
-      console.log('Backup uploaded to Firestore successfully');
+      // console.log('Backup uploaded to Firestore successfully');
       return `Firestore:backups/${filename}`;
     } catch (error) {
-      console.error('Error uploading backup to Firestore:', error);
+      // console.error('Error uploading backup to Firestore:', error);
       throw error;
     }
   };
@@ -521,115 +521,115 @@ const Settings: React.FC<SettingsProps> = ({
   useEffect(() => {
     const loadAllSettings = async () => {
       try {
-        console.log('🔄 Starting to load settings from Firebase...');
+        // console.log('🔄 Starting to load settings from Firebase...');
         
         // Test Firebase connection first
         try {
           const testDoc = doc(db, 'connection-test', 'test');
           await setDoc(testDoc, { timestamp: new Date().toISOString() });
           await deleteDoc(testDoc);
-          console.log('✅ Firebase connection test successful');
+          // console.log('✅ Firebase connection test successful');
         } catch (connectionError) {
-          console.error('❌ Firebase connection test failed:', connectionError);
-          console.log('⚠️ Will use localStorage settings only');
+          // console.error('❌ Firebase connection test failed:', connectionError);
+          // console.log('⚠️ Will use localStorage settings only');
           return; // Exit early if connection fails
         }
 
         // Load General Settings
-        console.log('📥 Loading general settings...');
+        // console.log('📥 Loading general settings...');
         const generalData = await loadSettingsFromFirebase('generalSettings');
         if (generalData) {
-          console.log('✅ Found general settings in Firebase:', generalData);
+          // console.log('✅ Found general settings in Firebase:', generalData);
           
           // Handle logo URL from Firebase
           let processedSettings = { ...generalData };
           if (generalData.logoPreview && generalData.logoPreview.startsWith('https://')) {
             // Logo is already a Firebase URL, use as is
             processedSettings.logoPreview = generalData.logoPreview;
-            console.log('✅ Using Firebase logo URL:', generalData.logoPreview);
+            // console.log('✅ Using Firebase logo URL:', generalData.logoPreview);
           } else if (generalData.logoPreview) {
             // Logo is local data URL, keep as is for now
-            console.log('✅ Using local logo data URL');
+            // console.log('✅ Using local logo data URL');
           }
           
           setGeneralSettings(processedSettings);
           localStorage.setItem('app_general_settings', JSON.stringify(processedSettings));
         } else {
-          console.log('⚠️ No general settings in Firebase, checking localStorage...');
+          // console.log('⚠️ No general settings in Firebase, checking localStorage...');
           const localGeneral = localStorage.getItem('app_general_settings');
           if (localGeneral) {
             const parsed = JSON.parse(localGeneral);
             setGeneralSettings(parsed);
-            console.log('✅ Using local general settings:', parsed);
+            // console.log('✅ Using local general settings:', parsed);
           }
         }
 
         // Load Security Settings
-        console.log('📥 Loading security settings...');
+        // console.log('📥 Loading security settings...');
         const securityData = await loadSettingsFromFirebase('securitySettings');
         if (securityData) {
-          console.log('✅ Found security settings in Firebase:', securityData);
+          // console.log('✅ Found security settings in Firebase:', securityData);
           setAdvancedSecurity(securityData as SecuritySettings);
           localStorage.setItem('app_security_settings', JSON.stringify(securityData));
         } else {
-          console.log('⚠️ No security settings in Firebase, checking localStorage...');
+          // console.log('⚠️ No security settings in Firebase, checking localStorage...');
           const localSecurity = localStorage.getItem('app_security_settings');
           if (localSecurity) {
             const parsed = JSON.parse(localSecurity);
             setAdvancedSecurity(parsed);
-            console.log('✅ Using local security settings:', parsed);
+            // console.log('✅ Using local security settings:', parsed);
           }
         }
 
         // Load Notification Settings
-        console.log('📥 Loading notification settings...');
+        // console.log('📥 Loading notification settings...');
         const notificationData = await loadSettingsFromFirebase('notificationSettings');
         if (notificationData) {
-          console.log('✅ Found notification settings in Firebase:', notificationData);
+          // console.log('✅ Found notification settings in Firebase:', notificationData);
           setNotificationSettings(notificationData as NotificationSettings);
           localStorage.setItem('app_notification_settings', JSON.stringify(notificationData));
         } else {
-          console.log('⚠️ No notification settings in Firebase, checking localStorage...');
+          // console.log('⚠️ No notification settings in Firebase, checking localStorage...');
           const localNotification = localStorage.getItem('app_notification_settings');
           if (localNotification) {
             const parsed = JSON.parse(localNotification);
             setNotificationSettings(parsed);
-            console.log('✅ Using local notification settings:', parsed);
+            // console.log('✅ Using local notification settings:', parsed);
           }
         }
 
         // Load Data Management Settings
-        console.log('📥 Loading data management settings...');
+        // console.log('📥 Loading data management settings...');
         const dataData = await loadSettingsFromFirebase('dataManagementSettings');
         if (dataData) {
-          console.log('✅ Found data management settings in Firebase:', dataData);
+          // console.log('✅ Found data management settings in Firebase:', dataData);
           setDataSettings(dataData as DataManagementSettings);
           localStorage.setItem('app_data_settings', JSON.stringify(dataData));
         } else {
-          console.log('⚠️ No data management settings in Firebase, checking localStorage...');
+          // console.log('⚠️ No data management settings in Firebase, checking localStorage...');
           const localData = localStorage.getItem('app_data_settings');
           if (localData) {
             const parsed = JSON.parse(localData);
             setDataSettings(parsed);
-            console.log('✅ Using local data management settings:', parsed);
+            // console.log('✅ Using local data management settings:', parsed);
           }
         }
 
         // Load Maintenance Settings
-        console.log('📥 Loading maintenance settings...');
+        // console.log('📥 Loading maintenance settings...');
         const maintenanceData = await loadSettingsFromFirebase('maintenanceSettings');
         if (maintenanceData) {
-          console.log('✅ Found maintenance settings in Firebase:', maintenanceData);
+          // console.log('✅ Found maintenance settings in Firebase:', maintenanceData);
           setMaintenanceSettings(maintenanceData as MaintenanceSettings);
         } else {
-          console.log('⚠️ No maintenance settings in Firebase, using defaults');
+          // console.log('⚠️ No maintenance settings in Firebase, using defaults');
         }
 
-        console.log('✅ All settings loading process completed');
+        // console.log('✅ All settings loading process completed');
 
       } catch (error) {
-        console.error('❌ Fatal error loading settings:', error);
-        console.log('⚠️ Falling back to localStorage settings only');
+        // console.error('❌ Fatal error loading settings:', error);
+        // console.log('⚠️ Falling back to localStorage settings only');
         
         // Load all settings from localStorage as fallback
         const localGeneral = localStorage.getItem('app_general_settings');
@@ -1683,10 +1683,9 @@ const Settings: React.FC<SettingsProps> = ({
           <h3 className="text-xl font-bold text-slate-800 dark:text-white">إدارة البيانات المتقدمة</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400">النسخ الاحتياطي، الأرشفة، وتنظيف النظام</p>
         </div>
-        {!readOnly && (
-          <button 
+        <button 
             onClick={handleSaveDataSettings}
-            disabled={isSaving}
+            disabled={isSaving || readOnly}
             className="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 flex items-center gap-2 shadow-md shadow-indigo-200 dark:shadow-none transition-all disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {isSaving ? (
@@ -1695,7 +1694,6 @@ const Settings: React.FC<SettingsProps> = ({
                <><Save className="w-4 h-4" /> حفظ الإعدادات</>
             )}
           </button>
-        )}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -1713,6 +1711,7 @@ const Settings: React.FC<SettingsProps> = ({
                   className="w-full border p-2.5 rounded-lg bg-white dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                   value={dataSettings.autoBackupFrequency}
                   onChange={e => setDataSettings({...dataSettings, autoBackupFrequency: e.target.value as any})}
+                  disabled={readOnly}
                 >
                   <option value="daily">يومي</option>
                   <option value="weekly">أسبوعي</option>
@@ -1727,6 +1726,7 @@ const Settings: React.FC<SettingsProps> = ({
                   className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                   value={dataSettings.autoBackupTime}
                   onChange={e => setDataSettings({...dataSettings, autoBackupTime: e.target.value})}
+                  disabled={readOnly}
                 />
               </div>
             </div>
@@ -1739,6 +1739,7 @@ const Settings: React.FC<SettingsProps> = ({
                 className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                 value={dataSettings.retainBackupsCount}
                 onChange={e => setDataSettings({...dataSettings, retainBackupsCount: parseInt(e.target.value)})}
+                disabled={readOnly}
               />
               <p className="text-xs text-slate-500 mt-1">سيتم حذف النسخ الأقدم تلقائياً عند تجاوز هذا العدد.</p>
             </div>
@@ -1754,7 +1755,7 @@ const Settings: React.FC<SettingsProps> = ({
             <label className="flex items-center justify-between cursor-pointer p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-300">تفعيل الأرشفة التلقائية</span>
               <div className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" className="sr-only peer" checked={dataSettings.enableAutoArchive} onChange={e => setDataSettings({...dataSettings, enableAutoArchive: e.target.checked})} />
+                <input type="checkbox" className="sr-only peer" checked={dataSettings.enableAutoArchive} onChange={e => setDataSettings({...dataSettings, enableAutoArchive: e.target.checked})} disabled={readOnly} />
                 <div className="w-11 h-6 bg-gray-200 dark:bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
               </div>
             </label>
@@ -1766,22 +1767,23 @@ const Settings: React.FC<SettingsProps> = ({
                 className="w-full border p-2.5 rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"
                 value={dataSettings.archiveClosedCasesAfterDays}
                 onChange={e => setDataSettings({...dataSettings, archiveClosedCasesAfterDays: parseInt(e.target.value)})}
+                disabled={readOnly}
               />
             </div>
 
             <div className="grid grid-cols-1 gap-3">
               <button 
                 onClick={handleArchiveOldCases}
-                disabled={isSaving}
-                className="w-full py-2 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-lg font-bold hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors flex justify-center items-center gap-2"
+                disabled={isSaving || readOnly}
+                className="w-full py-2 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 rounded-lg font-bold hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Archive className="w-4 h-4" /> تنفيذ الأرشفة الآن
               </button>
               
               <button 
                 onClick={handleArchiveAllClosedCases}
-                disabled={isSaving}
-                className="w-full py-2 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg font-bold hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex justify-center items-center gap-2"
+                disabled={isSaving || readOnly}
+                className="w-full py-2 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg font-bold hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Archive className="w-4 h-4" /> أرشفة جميع المغلقة (اختبار)
               </button>
@@ -1789,16 +1791,16 @@ const Settings: React.FC<SettingsProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <button 
                   onClick={handleViewArchivedCases}
-                  disabled={isSaving}
-                  className="py-2 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 rounded-lg font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex justify-center items-center gap-2 text-sm"
+                  disabled={isSaving || readOnly}
+                  className="py-2 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400 rounded-lg font-bold hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors flex justify-center items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <FileText className="w-4 h-4" /> عرض المؤرشفة
                 </button>
                 
                 <button 
                   onClick={handleRestoreArchivedCases}
-                  disabled={isSaving}
-                  className="py-2 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-lg font-bold hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors flex justify-center items-center gap-2 text-sm"
+                  disabled={isSaving || readOnly}
+                  className="py-2 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-lg font-bold hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors flex justify-center items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <RotateCcw className="w-4 h-4" /> استعادة
                 </button>
@@ -1835,11 +1837,12 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="text-xs text-slate-500 mb-3">CSV, XLSX</p>
                 <button 
                   onClick={() => importFileRef.current?.click()}
-                  className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors"
+                  disabled={readOnly}
+                  className="w-full bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   اختيار ملف
                 </button>
-                <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx" onChange={handleImportData} />
+                <input type="file" ref={importFileRef} className="hidden" accept=".csv, .xlsx" onChange={handleImportData} disabled={readOnly} />
               </div>
             </div>
 
@@ -1856,7 +1859,8 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="text-xs text-slate-500 mb-3">JSON, SQL</p>
                 <button 
                   onClick={handleCreateBackup}
-                  className="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 transition-colors"
+                  disabled={readOnly}
+                  className="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   تصدير الآن
                 </button>
@@ -1879,7 +1883,7 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="text-xs text-slate-500 mb-3">نسخة فورية في Firebase</p>
                 <button 
                   onClick={handleCreateBackup}
-                  disabled={isBackingUp}
+                  disabled={isBackingUp || readOnly}
                   className="w-full bg-green-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isBackingUp ? 'جاري النسخ...' : 'نسخ الآن'}
@@ -1893,7 +1897,7 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="text-xs text-slate-500 mb-3">فحص عمل النسخ التلقائي</p>
                 <button 
                   onClick={handleTestAutoBackup}
-                  disabled={isBackingUp}
+                  disabled={isBackingUp || readOnly}
                   className="w-full bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isBackingUp ? 'جاري الاختبار...' : 'اختبار الآن'}
@@ -1907,7 +1911,7 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="text-xs text-slate-500 mb-3">قائمة النسخ من Firebase</p>
                 <button 
                   onClick={handleListFirebaseBackups}
-                  disabled={isBackingUp}
+                  disabled={isBackingUp || readOnly}
                   className="w-full bg-purple-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isBackingUp ? 'جاري العرض...' : 'عرض الآن'}
@@ -1921,7 +1925,7 @@ const Settings: React.FC<SettingsProps> = ({
                 <p className="text-xs text-slate-500 mb-3">استعادة من السحابة</p>
                 <button 
                   onClick={handleRestoreFromFirebase}
-                  disabled={isRestoring}
+                  disabled={isRestoring || readOnly}
                   className="w-full bg-orange-600 text-white px-3 py-2 rounded-lg text-sm font-bold hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isRestoring ? 'جاري الاستعادة...' : 'استعادة الآن'}
@@ -1967,8 +1971,8 @@ const Settings: React.FC<SettingsProps> = ({
             </div>
             <button 
               onClick={handleCleanupData}
-              disabled={isSaving}
-              className="w-full py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors flex justify-center items-center gap-2"
+              disabled={isSaving || readOnly}
+              className="w-full py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Trash2 className="w-4 h-4" /> تنظيف النظام الآن
             </button>
@@ -2732,7 +2736,7 @@ const Settings: React.FC<SettingsProps> = ({
                           
                           {/* Quick Actions */}
                           <div className="flex gap-1">
-                            <button 
+                            {!readOnly && <button 
                               onClick={() => openEditUser(user)}
                               className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900 rounded-lg transition-colors"
                               title="تعديل المستخدم"
@@ -2740,7 +2744,7 @@ const Settings: React.FC<SettingsProps> = ({
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                               </svg>
-                            </button>
+                            </button>}
                             {onDeleteUser && !readOnly && (
                               <button 
                                 onClick={() => onDeleteUser(user.id)}

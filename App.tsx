@@ -260,6 +260,27 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // --- Simple Cache for Firebase Data ---
+  const [dataCache, setDataCache] = useState<Map<string, any>>(new Map());
+  const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+  const getCachedData = (key: string): any[] | null => {
+    const cached = dataCache.get(key);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      console.log(`📦 Using cached data for ${key}`);
+      return cached.data;
+    }
+    return null;
+  };
+
+  const setCachedData = (key: string, data: any[]): void => {
+    setDataCache(prev => new Map(prev).set(key, {
+      data,
+      timestamp: Date.now()
+    }));
+    console.log(`💾 Cached ${data.length} items for ${key}`);
+  };
+
   // --- Load data only when authenticated and user profile is loaded ---
   useEffect(() => {
     if (!isAuthenticated || !currentUser) {
@@ -276,17 +297,44 @@ function App() {
         let casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData, appointmentsData;
         
         if (navigator.onLine) {
-          // Online: Load from Firebase
-          [casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData, appointmentsData] = await Promise.all([
-            getCases(),
-            getHearings(),
-            getClients(),
-            getTasks(),
-            getActivities(),
-            getAppUsers(),
-            getLawyers(),
-            getAppointments()
-          ]);
+          // Check cache first
+          const cachedCases = getCachedData('cases');
+          const cachedClients = getCachedData('clients');
+          const cachedHearings = getCachedData('hearings');
+          const cachedTasks = getCachedData('tasks');
+          const cachedAppointments = getCachedData('appointments');
+
+          if (cachedCases && cachedClients && cachedHearings && cachedTasks && cachedAppointments) {
+            console.log('📦 Using all cached data');
+            casesData = cachedCases;
+            clientsData = cachedClients;
+            hearingsData = cachedHearings;
+            tasksData = cachedTasks;
+            appointmentsData = cachedAppointments;
+            activitiesData = [];
+            usersData = [];
+            lawyersData = [];
+          } else {
+            // Online: Load from Firebase
+            console.log('🔄 Loading fresh data from Firebase...');
+            [casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData, appointmentsData] = await Promise.all([
+              getCases(),
+              getHearings(),
+              getClients(),
+              getTasks(),
+              getActivities(),
+              getAppUsers(),
+              getLawyers(),
+              getAppointments()
+            ]);
+            
+            // Cache the results
+            setCachedData('cases', casesData || []);
+            setCachedData('clients', clientsData || []);
+            setCachedData('hearings', hearingsData || []);
+            setCachedData('tasks', tasksData || []);
+            setCachedData('appointments', appointmentsData || []);
+          }
           
           // Set the data to state
           setCases(casesData || []);
@@ -298,6 +346,17 @@ function App() {
           setUsers(usersData || []);
           setLawyers(lawyersData || []);
           setReferences([]);
+          
+          console.log('✅ Successfully loaded data from Firebase:', {
+            cases: casesData?.length || 0,
+            clients: clientsData?.length || 0,
+            hearings: hearingsData?.length || 0,
+            tasks: tasksData?.length || 0,
+            appointments: appointmentsData?.length || 0,
+            activities: activitiesData?.length || 0,
+            users: usersData?.length || 0,
+            lawyers: lawyersData?.length || 0
+          });
           
           // Cache the data for offline use
           await Promise.all([
@@ -313,6 +372,7 @@ function App() {
             const [casesData, hearingsData, clientsData, tasksData, appointmentsData] = await Promise.all([
               offlineManager.getCachedData('cases'),
               offlineManager.getCachedData('hearings'),
+              offlineManager.getCachedData('clients'),
               offlineManager.getCachedData('tasks'),
               offlineManager.getCachedData('appointments')
             ]);
@@ -328,11 +388,20 @@ function App() {
             setReferences([]);
             
             setError('تم تحميل البيانات من التخزين المؤقت (وضع عدم الاتصال)');
+            console.log('✅ Successfully loaded data from cache:', {
+              cases: casesData?.length || 0,
+              clients: clientsData?.length || 0,
+              hearings: hearingsData?.length || 0,
+              tasks: tasksData?.length || 0,
+              appointments: appointmentsData?.length || 0
+            });
           } catch (cacheError) {
+            console.error('❌ Failed to load from cache:', cacheError);
             setError('فشل في تحميل البيانات من قاعدة البيانات والتخزين المؤقت');
           }
         }
       } catch (error) {
+        console.error('❌ Failed to load data from database:', error);
         setError('فشل في تحميل البيانات من قاعدة البيانات');
       } finally {
         setLoading(false);
@@ -438,7 +507,7 @@ function App() {
       }
     };
 
-    const interval = setInterval(checkConnection, 5000); // Check every 5 seconds
+    const interval = setInterval(checkConnection, 30000); // Check every 30 seconds
 
     return () => {
       window.removeEventListener('online', handleOnline);
@@ -2419,6 +2488,7 @@ function App() {
           onAddActivity={handleAddActivity}
           canViewIncome={hasAccess('fees')}
           canViewExpenses={hasAccess('expenses')}
+          readOnly={isReadOnly('fees') || isReadOnly('expenses')}
         />;
       case 'reports':
         return <Reports 

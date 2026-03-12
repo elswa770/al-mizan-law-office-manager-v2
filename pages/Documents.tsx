@@ -684,6 +684,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                   </button>
                </div>
                
+               {!readOnly && (
                <button 
                   onClick={handleOpenUpload}
                   className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-primary-700 shadow-sm transition-colors" 
@@ -691,6 +692,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                >
                   <Upload className="w-4 h-4" /> رفع جديد
                </button>
+               )}
             </div>
          </div>
 
@@ -841,6 +843,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                         type="button"
                         onClick={() => { setUploadData({ ...uploadData, targetType: 'case', targetId: '', docType: 'contract' }); }}
                         className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${uploadData.targetType === 'case' ? 'bg-white dark:bg-slate-600 text-indigo-600 dark:text-indigo-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+                        disabled={readOnly}
                      >
                         <Briefcase className="w-4 h-4 inline-block ml-2" /> خاص بقضية
                      </button>
@@ -848,6 +851,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                         type="button"
                         onClick={() => { setUploadData({ ...uploadData, targetType: 'client', targetId: '', docType: 'national_id' }); }}
                         className={`flex-1 py-2 text-sm font-bold rounded-md transition-all ${uploadData.targetType === 'client' ? 'bg-white dark:bg-slate-600 text-green-600 dark:text-green-300 shadow-sm' : 'text-slate-500 dark:text-slate-400'}`}
+                        disabled={readOnly}
                      >
                         <User className="w-4 h-4 inline-block ml-2" /> خاص بموكل
                      </button>
@@ -863,6 +867,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                         className="w-full border border-slate-300 dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white"
                         value={uploadData.targetId}
                         onChange={e => setUploadData({ ...uploadData, targetId: e.target.value })}
+                        disabled={readOnly}
                      >
                         <option value="">-- اختر --</option>
                         {uploadData.targetType === 'case' 
@@ -873,11 +878,11 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                   </div>
 
                   {/* File Upload Area */}
-                  <div 
-                     onClick={() => fileInputRef.current?.click()}
-                     className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${uploadData.file ? 'border-primary-300 dark:border-primary-600 bg-primary-50 dark:bg-primary-900/20' : 'border-slate-300 dark:border-slate-600 hover:border-primary-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
-                  >
-                     <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} />
+                     <div 
+                        onClick={() => !readOnly && fileInputRef.current?.click()}
+                        className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${uploadData.file ? 'border-primary-300 dark:border-primary-600 bg-primary-50 dark:bg-primary-900/20' : 'border-slate-300 dark:border-slate-600 hover:border-primary-400 hover:bg-slate-50 dark:hover:bg-slate-700'} ${readOnly ? 'cursor-not-allowed opacity-50' : ''}`}
+                     >
+                        <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileSelect} disabled={readOnly} />
                      {uploadData.file ? (
                         <div className="flex flex-col items-center gap-2">
                            <FileCheck className="w-8 h-8 text-primary-600 dark:text-primary-400" />
@@ -901,6 +906,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                            checked={uploadData.uploadToDrive}
                            onChange={e => setUploadData({...uploadData, uploadToDrive: e.target.checked})}
                            className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                           disabled={readOnly}
                         />
                         <Cloud className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                         <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -926,6 +932,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                            value={uploadData.name}
                            onChange={e => setUploadData({ ...uploadData, name: e.target.value })}
                            placeholder="مثال: عقد بيع ابتدائي"
+                           disabled={readOnly}
                         />
                      </div>
                      <div>
@@ -934,6 +941,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                            className="w-full border border-slate-300 dark:border-slate-600 p-2 rounded-lg bg-white dark:bg-slate-700 dark:text-white"
                            value={uploadData.docType}
                            onChange={e => setUploadData({ ...uploadData, docType: e.target.value })}
+                           disabled={readOnly}
                         >
                            {uploadData.targetType === 'case' ? (
                               <>
@@ -958,7 +966,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
 
                   {uploadData.targetType === 'case' && (
                      <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                        <input type="checkbox" checked={uploadData.isOriginal} onChange={e => setUploadData({ ...uploadData, isOriginal: e.target.checked })} className="rounded text-primary-600 focus:ring-primary-500" />
+                        <input type="checkbox" checked={uploadData.isOriginal} onChange={e => setUploadData({ ...uploadData, isOriginal: e.target.checked })} className="rounded text-primary-600 focus:ring-primary-500" disabled={readOnly} />
                         نسخة أصلية
                      </label>
                   )}
@@ -966,7 +974,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                   {/* Footer Actions */}
                   <div className="pt-2 flex gap-3">
                      <button type="button" onClick={() => setIsUploadModalOpen(false)} className="flex-1 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold">إلغاء</button>
-                     <button 
+                     {!readOnly && <button 
                         type="submit" 
                         disabled={!uploadData.file || !uploadData.name || !uploadData.targetId || isUploadingToDrive} 
                         className="flex-1 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
@@ -982,7 +990,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                               حفظ المستند
                            </>
                         )}
-                     </button>
+                     </button>}
                   </div>
                </form>
             </div>

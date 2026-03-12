@@ -28,6 +28,11 @@ service cloud.firestore {
       allow read, write: if request.auth != null;
     }
     
+    // Hearings collection - allow read/write to authenticated users
+    match /hearings/{hearingId} {
+      allow read, write: if request.auth != null;
+    }
+    
     // Archived cases collection - allow read/write to authenticated users
     match /archived_cases/{caseId} {
       allow read, write: if request.auth != null;
@@ -38,6 +43,36 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
+    // Clients collection - allow read/write to authenticated users
+    match /clients/{clientId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Tasks collection - allow read/write to authenticated users
+    match /tasks/{taskId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Activities collection - allow read/write to authenticated users
+    match /activities/{activityId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Lawyers collection - allow read/write to authenticated users
+    match /lawyers/{lawyerId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Legal references collection - allow read/write to authenticated users
+    match /references/{referenceId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Locations collection - allow read/write to authenticated users
+    match /locations/{locationId} {
+      allow read, write: if request.auth != null;
+    }
+    
     // Connection test collection - allow authenticated users
     match /connection-test/{document} {
       allow read, write: if request.auth != null;
@@ -45,7 +80,7 @@ service cloud.firestore {
     
     // Deny all other reads/writes
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if request.auth != null;
     }
   }
 }
