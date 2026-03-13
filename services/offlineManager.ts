@@ -34,6 +34,8 @@ class OfflineManager {
   constructor() {
     this.initDB();
     this.setupNetworkListeners();
+    // Clear expired cache entries on startup
+    this.clearExpiredCache();
   }
 
   // Initialize IndexedDB for offline storage
@@ -91,8 +93,24 @@ class OfflineManager {
   }
 
   // Cache data for offline use
-  async cacheData(type: string, data: any[]): Promise<void> {
+  async cacheData(type: string, data: any): Promise<void> {
     if (!this.db) await this.initDB();
+
+    // Handle different data types
+    let dataArray: any[] = [];
+    
+    if (Array.isArray(data)) {
+      dataArray = data;
+    } else if (data && typeof data === 'object') {
+      // Single object case
+      dataArray = [data];
+    } else if (data === null || data === undefined) {
+      console.warn(`⚠️ cacheData received null/undefined for type: ${type}`);
+      return;
+    } else {
+      console.error(`❌ cacheData received invalid data for type ${type}:`, typeof data, data);
+      return;
+    }
 
     const transaction = this.db!.transaction(['cachedData'], 'readwrite');
     const store = transaction.objectStore('cachedData');
@@ -112,7 +130,12 @@ class OfflineManager {
     });
 
     // Add new data
-    for (const item of data) {
+    for (const item of dataArray) {
+      if (!item || !item.id) {
+        console.warn(`⚠️ Skipping invalid item in cacheData for type ${type}:`, item);
+        continue;
+      }
+      
       const cacheItem = {
         id: `${type}_${item.id}`,
         type,
@@ -122,7 +145,7 @@ class OfflineManager {
       store.add(cacheItem);
     }
 
-    console.log(`Cached ${data.length} ${type} for offline use`);
+    // console.log(`Cached ${dataArray.length} ${type} for offline use`);
     this.notifyStatusChange();
   }
 
@@ -364,7 +387,31 @@ class OfflineManager {
     
     switch (type) {
       case 'create':
-        await addCase(data);
+        const caseId = await addCase(data);
+        console.log(`✅ Case created with Firebase ID: ${caseId}`);
+        
+        // Update tempIdMap if this was a temp ID
+        const tempId = data.tempId || data.id;
+        if (tempId && (tempId.startsWith('temp_case_') || !tempId.includes('caseId'))) {
+          this.tempIdMap.set(tempId, caseId);
+          console.log(`📍 Stored case ID mapping: ${tempId} -> ${caseId}`);
+          console.log(`📍 Current tempIdMap size: ${this.tempIdMap.size}`);
+          
+          // Update cached case data with real ID
+          try {
+            const cachedData = await this.getCachedData('cases');
+            const updatedCache = cachedData.map((caseItem: any) => {
+              if (caseItem.id === tempId) {
+                return { ...caseItem, id: caseId, _synced: true };
+              }
+              return caseItem;
+            });
+            await this.cacheData('cases', updatedCache);
+            console.log(`✅ Updated cached case with real Firebase ID`);
+          } catch (cacheError) {
+            console.warn(`⚠️ Failed to update cached case data:`, cacheError);
+          }
+        }
         break;
       case 'update':
         if (!data.id) {
@@ -402,7 +449,31 @@ class OfflineManager {
     
     switch (type) {
       case 'create':
-        await addClient(data);
+        const clientId = await addClient(data);
+        console.log(`✅ Client created with Firebase ID: ${clientId}`);
+        
+        // Update tempIdMap if this was a temp ID
+        const tempId = data.tempId || data.id;
+        if (tempId && (tempId.startsWith('temp_client_') || !tempId.includes('clientId'))) {
+          this.tempIdMap.set(tempId, clientId);
+          console.log(`📍 Stored client ID mapping: ${tempId} -> ${clientId}`);
+          console.log(`📍 Current tempIdMap size: ${this.tempIdMap.size}`);
+          
+          // Update cached client data with real ID
+          try {
+            const cachedData = await this.getCachedData('clients');
+            const updatedCache = cachedData.map((client: any) => {
+              if (client.id === tempId) {
+                return { ...client, id: clientId, _synced: true };
+              }
+              return client;
+            });
+            await this.cacheData('clients', updatedCache);
+            console.log(`✅ Updated cached client with real Firebase ID`);
+          } catch (cacheError) {
+            console.warn(`⚠️ Failed to update cached client data:`, cacheError);
+          }
+        }
         break;
       case 'update':
         if (!data.id) {
@@ -802,6 +873,30 @@ class OfflineManager {
 
     console.log('Cleared all cached data and pending actions');
     this.notifyStatusChange();
+  }
+
+  // Clear expired cache entries
+  async clearExpiredCache(): Promise<void> {
+    if (!this.db) await this.initDB();
+
+    const transaction = this.db!.transaction(['cachedData'], 'readwrite');
+    const store = transaction.objectStore('cachedData');
+    const request = store.openCursor();
+
+    request.onsuccess = (event) => {
+      const cursor = (event.target as IDBRequest).result;
+      if (cursor) {
+        const data = cursor.value;
+        const isExpired = Date.now() - new Date(data.timestamp).getTime() > 24 * 60 * 60 * 1000; // 24 hours
+        
+        if (isExpired) {
+          store.delete(cursor.primaryKey);
+          console.log(`🗑️ Removed expired cache entry: ${cursor.primaryKey}`);
+        }
+        
+        cursor.continue();
+      }
+    };
   }
 
   // Export data for backup

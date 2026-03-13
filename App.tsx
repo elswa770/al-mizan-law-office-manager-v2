@@ -163,20 +163,20 @@ function App() {
           
           if (userProfile) {
             // Log the original user profile for debugging
-            console.log('🔍 Original user profile from Firestore:', {
-              userId: userProfile.id,
-              hasId: !!userProfile.id,
-              hasName: !!userProfile.name,
-              hasEmail: !!userProfile.email,
-              hasPermissions: !!userProfile.permissions,
-              permissionsCount: userProfile.permissions?.length || 0,
-              permissions: userProfile.permissions
-            });
+            // console.log('🔍 Original user profile from Firestore:', {
+              // userId: userProfile.id,
+              // hasId: !!userProfile.id,
+              // hasName: !!userProfile.name,
+              // hasEmail: !!userProfile.email,
+              // hasPermissions: !!userProfile.permissions,
+              // permissionsCount: userProfile.permissions?.length || 0,
+              // permissions: userProfile.permissions
+           // });
             
             // Check if user profile has valid data (not just lastLogin)
             if (!userProfile.id || !userProfile.name || !userProfile.email || !userProfile.permissions || userProfile.permissions.length === 0) {
-              console.log('⚠️ User profile is incomplete or missing basic data, creating complete profile...');
-              console.log('📋 Current profile data:', userProfile);
+              // console.log('⚠️ User profile is incomplete or missing basic data, creating complete profile...');
+              // console.log('📋 Current profile data:', userProfile);
               
               // Create a complete user profile using Firebase Auth data
               // IMPORTANT: Use permissions from Firebase or default permissions
@@ -231,12 +231,12 @@ function App() {
             } else {
               // Profile is complete, use it as-is
               setCurrentUser(userProfile);
-              console.log('✅ Using complete user profile from Firebase:', {
-                userId: userProfile.id,
-                permissionsCount: userProfile.permissions.length,
-                roleLabel: userProfile.roleLabel,
-                permissions: userProfile.permissions
-              });
+              // console.log('✅ Using complete user profile from Firebase:', {
+                // userId: userProfile.id,
+                // permissionsCount: userProfile.permissions.length,
+                // roleLabel: userProfile.roleLabel,
+                // permissions: userProfile.permissions
+             // });
             }
           } else {
             // User doesn't exist in Firestore - show error and reset current user
@@ -267,7 +267,7 @@ function App() {
   const getCachedData = (key: string): any[] | null => {
     const cached = dataCache.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      console.log(`📦 Using cached data for ${key}`);
+      // console.log(`📦 Using cached data for ${key}`);
       return cached.data;
     }
     return null;
@@ -278,7 +278,7 @@ function App() {
       data,
       timestamp: Date.now()
     }));
-    console.log(`💾 Cached ${data.length} items for ${key}`);
+    // console.log(`💾 Cached ${data.length} items for ${key}`);
   };
 
   // --- Load data only when authenticated and user profile is loaded ---
@@ -305,7 +305,7 @@ function App() {
           const cachedAppointments = getCachedData('appointments');
 
           if (cachedCases && cachedClients && cachedHearings && cachedTasks && cachedAppointments) {
-            console.log('📦 Using all cached data');
+            // console.log('📦 Using all cached data');
             casesData = cachedCases;
             clientsData = cachedClients;
             hearingsData = cachedHearings;
@@ -316,7 +316,7 @@ function App() {
             lawyersData = [];
           } else {
             // Online: Load from Firebase
-            console.log('🔄 Loading fresh data from Firebase...');
+            // console.log('🔄 Loading fresh data from Firebase...');
             [casesData, hearingsData, clientsData, tasksData, activitiesData, usersData, lawyersData, appointmentsData] = await Promise.all([
               getCases(),
               getHearings(),
@@ -347,16 +347,16 @@ function App() {
           setLawyers(lawyersData || []);
           setReferences([]);
           
-          console.log('✅ Successfully loaded data from Firebase:', {
-            cases: casesData?.length || 0,
-            clients: clientsData?.length || 0,
-            hearings: hearingsData?.length || 0,
-            tasks: tasksData?.length || 0,
-            appointments: appointmentsData?.length || 0,
-            activities: activitiesData?.length || 0,
-            users: usersData?.length || 0,
-            lawyers: lawyersData?.length || 0
-          });
+          // console.log('✅ Successfully loaded data from Firebase:', {
+          //   cases: casesData?.length || 0,
+          //   clients: clientsData?.length || 0,
+          //   hearings: hearingsData?.length || 0,
+          //   tasks: tasksData?.length || 0,
+          //   appointments: appointmentsData?.length || 0,
+          //   activities: activitiesData?.length || 0,
+          //   users: usersData?.length || 0,
+          //   lawyers: lawyersData?.length || 0
+          // });
           
           // Cache the data for offline use
           await Promise.all([
@@ -388,20 +388,20 @@ function App() {
             setReferences([]);
             
             setError('تم تحميل البيانات من التخزين المؤقت (وضع عدم الاتصال)');
-            console.log('✅ Successfully loaded data from cache:', {
-              cases: casesData?.length || 0,
-              clients: clientsData?.length || 0,
-              hearings: hearingsData?.length || 0,
-              tasks: tasksData?.length || 0,
-              appointments: appointmentsData?.length || 0
-            });
+            // console.log('✅ Successfully loaded data from cache:', {
+            //   cases: casesData?.length || 0,
+            //   clients: clientsData?.length || 0,
+            //   hearings: hearingsData?.length || 0,
+            //   tasks: tasksData?.length || 0,
+            //   appointments: appointmentsData?.length || 0
+            // });
           } catch (cacheError) {
-            console.error('❌ Failed to load from cache:', cacheError);
+            // console.error('❌ Failed to load from cache:', cacheError);
             setError('فشل في تحميل البيانات من قاعدة البيانات والتخزين المؤقت');
           }
         }
       } catch (error) {
-        console.error('❌ Failed to load data from database:', error);
+        // console.error('❌ Failed to load data from database:', error);
         setError('فشل في تحميل البيانات من قاعدة البيانات');
       } finally {
         setLoading(false);
@@ -414,12 +414,12 @@ function App() {
   // --- Network Status Listener ---
   useEffect(() => {
     const handleOnline = async () => {
-      console.log('🌐 Connection restored, syncing data...');
+      // console.log('🌐 Connection restored, syncing data...');
       
       // Sync pending actions
       try {
         await offlineManager.syncPendingActions();
-        console.log('✅ Pending actions synced successfully');
+        // console.log('✅ Pending actions synced successfully');
       } catch (error) {
         console.error('❌ Failed to sync pending actions:', error);
       }
@@ -435,7 +435,7 @@ function App() {
           ]);
           
           // Merge server data with local offline changes
-          console.log('🔄 Merging server data with local changes...');
+          // console.log('🔄 Merging server data with local changes...');
           
           // For cases, merge local changes with server data
           const mergedCases = serverCasesData.map(serverCase => {
@@ -454,7 +454,7 @@ function App() {
           
           const finalCases = [...mergedCases, ...localOnlyCases];
           
-          console.log('📊 Final cases data:', finalCases);
+          // console.log('📊 Final cases data:', finalCases);
           setCases(finalCases);
           setClients(serverClientsData);
           setHearings(serverHearingsData);
@@ -468,7 +468,7 @@ function App() {
             offlineManager.cacheData('tasks', serverTasksData)
           ]);
           
-          console.log('✅ Data synced and merged successfully');
+          // console.log('✅ Data synced and merged successfully');
         } catch (error) {
           console.error('❌ Failed to sync data:', error);
         }
@@ -479,7 +479,7 @@ function App() {
     };
 
     const handleOffline = () => {
-      console.log('📱 Connection lost, switching to offline mode');
+      // console.log('📱 Connection lost, switching to offline mode');
       // Force update to refresh UI
       setForceUpdate(prev => prev + 1);
     };
@@ -500,10 +500,10 @@ function App() {
         
         // If we get here, we have some form of connectivity
         const currentStatus = navigator.onLine;
-        console.log('🔍 Connection check:', currentStatus ? 'Online' : 'Offline');
+        // console.log('🔍 Connection check:', currentStatus ? 'Online' : 'Offline');
       } catch (error) {
         // Network error - definitely offline
-        console.log('🔍 Connection check: Offline (network error)');
+        // console.log('🔍 Connection check: Offline (network error)');
       }
     };
 
@@ -519,13 +519,13 @@ function App() {
   // --- Sync Completion Listener ---
   useEffect(() => {
     const handleSyncCompleted = async (event: CustomEvent) => {
-      console.log('🔄 Sync completed event received:', event.detail);
+      // console.log('🔄 Sync completed event received:', event.detail);
       
       // Reload cached data to get updated IDs
       if (isAuthenticated && currentUser) {
         try {
           const cachedHearings = await offlineManager.getCachedData('hearings');
-          console.log('📱 Updated hearings from cache after sync:', cachedHearings);
+          // console.log('📱 Updated hearings from cache after sync:', cachedHearings);
           
           // Update local state with cached data (which now has real Firebase IDs)
           setHearings(cachedHearings);
@@ -534,7 +534,7 @@ function App() {
           setForceUpdate(prev => prev + 1);
           setRefreshKey(prev => prev + 1);
           
-          console.log('✅ Local state updated with synced data');
+          // console.log('✅ Local state updated with synced data');
         } catch (error) {
           console.error('❌ Failed to update local state after sync:', error);
         }
@@ -552,21 +552,21 @@ function App() {
   // --- Auth Handlers ---
   const handleLogin = async (email: string, password: string) => {
     try {
-      console.log('Attempting login for email:', email);
+      // console.log('Attempting login for email:', email);
       const user = await loginUser(email, password);
-      console.log('Login successful, user:', user);
+      // console.log('Login successful, user:', user);
       
       // Note: lastLogin update removed to prevent data corruption
       // Firebase Auth state change will handle user profile loading
       
       return true; // Return success
     } catch (error: any) {
-      console.error('Login error:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        stack: error.stack
-      });
+      // console.error('Login error:', error);
+      // console.error('Error details:', {
+      //   message: error.message,
+      //   code: error.code,
+      //   stack: error.stack
+      // });
       
       // Re-throw error to be handled by the Login component
       throw error;
@@ -587,7 +587,7 @@ function App() {
       await logoutUser();
       // Auth state change will handle the rest
     } catch (error) {
-      console.error('Logout error:', error);
+      // console.error('Logout error:', error);
     }
   };
   const getPermission = (moduleId: string): PermissionLevel => {
@@ -964,9 +964,9 @@ function App() {
               }
               return c;
             });
-            console.log('App.tsx - Updated cases array:', updatedCases);
-            console.log('App.tsx - Looking for case with ID:', updatedCase.id);
-            console.log('App.tsx - Updated case in array:', updatedCases.find(c => c.id === updatedCase.id));
+            // console.log('App.tsx - Updated cases array:', updatedCases);
+            // console.log('App.tsx - Looking for case with ID:', updatedCase.id);
+            // console.log('App.tsx - Updated case in array:', updatedCases.find(c => c.id === updatedCase.id));
             return updatedCases;
           });
           
@@ -995,22 +995,22 @@ function App() {
         }
       } else {
         // Offline mode - save locally and add to queue
-        console.log('📱 App.tsx - Offline mode, updating case locally');
-        console.log('📱 App.tsx - Case to update:', updatedCase);
-        console.log('📱 App.tsx - Current cases before update:', cases);
+        // console.log('📱 App.tsx - Offline mode, updating case locally');
+        // console.log('📱 App.tsx - Case to update:', updatedCase);
+        // console.log('📱 App.tsx - Current cases before update:', cases);
         
         // Update local state first
         const updatedCases = cases.map(c => {
           if (c.id === updatedCase.id) {
-            console.log('📱 App.tsx - Found case to update:', c);
-            console.log('📱 App.tsx - Updated case will be:', { ...c, ...updatedCase });
+            // console.log('📱 App.tsx - Found case to update:', c);
+            // console.log('📱 App.tsx - Updated case will be:', { ...c, ...updatedCase });
             return { ...c, ...updatedCase };
           }
           return c;
         });
         
-        console.log('📱 App.tsx - Updated cases array:', updatedCases);
-        console.log('📱 App.tsx - Setting cases with new data...');
+        // console.log('📱 App.tsx - Updated cases array:', updatedCases);
+        // console.log('📱 App.tsx - Setting cases with new data...');
         
         // Force update with new array reference
         setCases([...updatedCases]);
@@ -1020,9 +1020,9 @@ function App() {
         setRefreshKey(prev => prev + 1); // Additional force re-render
         
         // Verify the update happened
-        setTimeout(() => {
-          console.log('📱 App.tsx - Cases after setCases:', cases);
-        }, 100);
+        // setTimeout(() => {
+        //   console.log('📱 App.tsx - Cases after setCases:', cases);
+        // }, 100);
         
         await offlineManager.addPendingAction({
           type: 'update',
@@ -1032,7 +1032,7 @@ function App() {
         
         // Cache locally with updated data
         await offlineManager.cacheData('cases', updatedCases);
-        console.log('📱 App.tsx - Case updated and cached successfully');
+        // // console.log('📱 App.tsx - Case updated and cached successfully');
       }
       
       // Log activity (works offline too)
@@ -1044,7 +1044,7 @@ function App() {
       });
       
     } catch (err) {
-      console.error('❌ App.tsx - Error updating case:', err);
+      // console.error('❌ App.tsx - Error updating case:', err);
       setError('فشل في تحديث القضية');
     }
   };

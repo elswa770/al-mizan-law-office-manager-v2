@@ -43,7 +43,7 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
       const query = getCurrentPageSearchQuery();
       
       if (query) {
-        console.log('🔍 البحث الصوتي في الصفحة الحالية (الموكلين):', query);
+       // console.log('🔍 البحث الصوتي في الصفحة الحالية (الموكلين):', query);
         
         // Apply search to current page
         setSearchTerm(query);
@@ -56,7 +56,7 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
         // Show results count
         setTimeout(() => {
           const results = performCurrentPageSearch(query, 'clients', clients);
-          console.log(`🔍 نتائج البحث الصوتي في الموكلين: "${query}" - ${results.length} نتيجة`);
+         // console.log(`🔍 نتائج البحث الصوتي في الموكلين: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -72,7 +72,7 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في الموكلين:', { voiceSearchQuery, searchType, searchInCurrent });
+    // console.log('🔍 التحقق من البحث الصوتي في الموكلين:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -91,11 +91,11 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
                              !normalizedQuery.includes('خصم') && !normalizedQuery.includes('الخصومة') &&
                              !normalizedQuery.includes('محاكم');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isClientSearch });
+       // console.log('🎯 تحليل البحث:', { normalizedQuery, isClientSearch });
         
         // Only apply search if it's actually for clients
         if (isClientSearch) {
-          console.log('✅ تطبيق البحث الصوتي للموكلين:', voiceSearchQuery);
+         // console.log('✅ تطبيق البحث الصوتي للموكلين:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -113,10 +113,10 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
               client.address?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
             ).length;
             
-            console.log(`🔍 البحث الصوتي للموكلين: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           // console.log(`🔍 البحث الصوتي للموكلين: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للموكلين، سيتم تجاهله:', voiceSearchQuery);
+         // console.log('❌ هذا البحث ليس للموكلين، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking
@@ -136,7 +136,7 @@ const Clients: React.FC<ClientsProps> = ({ clients, cases, hearings, onClientCli
   
   // Force re-render when clients change (for offline updates)
   useEffect(() => {
-    console.log('🔄 Clients.tsx - Clients prop changed:', clients.length);
+   // console.log('🔄 Clients.tsx - Clients prop changed:', clients.length);
     setForceRerender(prev => prev + 1);
   }, [clients]);
 

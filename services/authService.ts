@@ -32,7 +32,7 @@ export const loginUser = async (email: string, password: string): Promise<AuthUs
       photoURL: user.photoURL || undefined
     };
   } catch (error: any) {
-    console.error('Login error:', error);
+    // console.error('Login error:', error);
     
     // Don't log failed attempts here - it's handled in the Login component
     // to avoid duplicate logging and ensure proper error handling
@@ -77,7 +77,7 @@ export const registerUser = async (
       photoURL: user.photoURL || undefined
     };
   } catch (error: any) {
-    console.error('Registration error:', error);
+    // console.error('Registration error:', error);
     throw new Error(getAuthErrorMessage(error.code));
   }
 };
@@ -86,7 +86,7 @@ export const logoutUser = async (): Promise<void> => {
   try {
     await signOut(auth);
   } catch (error: any) {
-    console.error('Logout error:', error);
+    // console.error('Logout error:', error);
     throw new Error('فشل في تسجيل الخروج');
   }
 };
@@ -95,7 +95,7 @@ export const resetPassword = async (email: string): Promise<void> => {
   try {
     await sendPasswordResetEmail(auth, email);
   } catch (error: any) {
-    console.error('Password reset error:', error);
+    // console.error('Password reset error:', error);
     throw new Error(getAuthErrorMessage(error.code));
   }
 };
@@ -104,12 +104,11 @@ export const resetPassword = async (email: string): Promise<void> => {
 
 export const getUserProfile = async (uid: string): Promise<AppUser | null> => {
   try {
-    console.log('🔍 Getting user profile for UID:', uid);
     const userDoc = await getDoc(doc(db, 'users', uid));
-    console.log('📄 User doc exists:', userDoc.exists());
+    // console.log('📄 User doc exists:', userDoc.exists());
     if (userDoc.exists()) {
       const rawData = userDoc.data();
-      console.log('📋 Raw data from Firestore:', rawData);
+
       
       // Convert Firestore data to AppUser format
       const userData: AppUser = {
@@ -134,20 +133,20 @@ export const getUserProfile = async (uid: string): Promise<AppUser | null> => {
         securityQuestions: rawData.securityQuestions
       };
       
-      console.log('👤 Formatted user profile data:', {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        hasPermissions: !!userData.permissions,
-        permissionsCount: userData.permissions?.length || 0,
-        permissions: userData.permissions
-      });
+      // console.log('👤 Formatted user profile data:', {
+      //   id: userData.id,
+      //   name: userData.name,
+      //   email: userData.email,
+      //   hasPermissions: !!userData.permissions,
+      //   permissionsCount: userData.permissions?.length || 0,
+      //   permissions: userData.permissions
+      // });
       return userData;
     }
-    console.log('❌ No user profile found for UID:', uid);
+    // console.log('❌ No user profile found for UID:', uid);
     return null;
   } catch (error) {
-    console.error('❌ Error getting user profile:', error);
+    // console.error('❌ Error getting user profile:', error);
     throw new Error('فشل في جلب بيانات المستخدم');
   }
 };
@@ -161,7 +160,7 @@ export const updateUserProfile = async (uid: string, data: Partial<AppUser>): Pr
       await updateProfile(auth.currentUser, { displayName: data.name });
     }
   } catch (error) {
-    console.error('Error updating user profile:', error);
+    // console.error('Error updating user profile:', error);
     throw new Error('فشل في تحديث بيانات المستخدم');
   }
 };

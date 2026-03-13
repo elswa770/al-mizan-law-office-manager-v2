@@ -128,7 +128,7 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
     // Request notification permission on component mount
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission().then(permission => {
-        console.log('Dashboard notification permission:', permission);
+        // console.log('Dashboard notification permission:', permission);
       });
     }
   }, []);
@@ -175,7 +175,7 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
         }
       }
     } catch (error) {
-      console.error('Failed to show notification:', error);
+      // console.error('Failed to show notification:', error);
     }
   }, [criticalCases, generalSettings?.enableSystemNotifications]);
 
@@ -190,33 +190,41 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
       String(todayLocal.getMonth() + 1).padStart(2, '0') + '-' + 
       String(todayLocal.getDate()).padStart(2, '0');
     
-    console.log('Dashboard - Today String (Local):', todayString);
-    console.log('Dashboard - All Appointments:', appointments);
-    console.log('Dashboard - Appointments type:', typeof appointments);
-    console.log('Dashboard - Is appointments array?', Array.isArray(appointments));
+    // console.log('Dashboard - Today String (Local):', todayString);
+    // console.log('Dashboard - All Appointments:', appointments);
+    // console.log('Dashboard - Appointments type:', typeof appointments);
+    // console.log('Dashboard - Is appointments array?', Array.isArray(appointments));
     
     if (!Array.isArray(appointments)) {
-      console.log('Dashboard - Appointments is not an array!');
+      // console.log('Dashboard - Appointments is not an array!');
       return [];
     }
     
     const filtered = appointments.filter(apt => {
-      console.log('Dashboard - Checking appointment:', apt, 'apt.date:', apt.date, 'todayString:', todayString);
+      // console.log('Dashboard - Checking appointment:', apt, 'apt.date:', apt.date, 'todayString:', todayString);
       return apt.date === todayString;
     });
-    console.log('Dashboard - Today Appointments:', filtered);
+    // console.log('Dashboard - Today Appointments:', filtered);
     return filtered;
   }, [appointments]);
 
   // Add debug for the card value
-  console.log('Dashboard - todayAppointments.length:', todayAppointments.length);
+  // console.log('Dashboard - todayAppointments.length:', todayAppointments.length);
   
   // Remove the debug logs after fixing
-  setTimeout(() => {
-    console.clear();
-  }, 5000);
+  // setTimeout(() => {
+  //   console.clear();
+  // }, 5000);
   
   const totalDues = cases.reduce((acc, c) => acc + (c.finance ? (c.finance.agreedFees - c.finance.paidAmount) : 0), 0);
+
+  // Calculate real financial data from cases
+  const totalAgreedFees = cases.reduce((acc, c) => acc + (c.finance?.agreedFees || 0), 0);
+  const totalPaidAmount = cases.reduce((acc, c) => acc + (c.finance?.paidAmount || 0), 0);
+  const totalExpenses = cases.reduce((acc, c) => acc + (c.finance?.expenses || 0), 0);
+  
+  // Calculate collection percentage dynamically
+  const collectionPercentage = totalAgreedFees > 0 ? Math.round((totalPaidAmount / totalAgreedFees) * 100) : 0;
 
   const delayedHearings = displayHearings.filter(h => 
     new Date(h.date) < new Date() && 
@@ -681,7 +689,7 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
             </div>
 
             {/* Financial Summary */}
-            {!isFocusMode && (
+            {!isFocusMode && totalAgreedFees > 0 && (
                <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 transition-colors">
                   <h3 className="font-bold text-slate-800 dark:text-white text-sm mb-4 flex items-center gap-2">
                      <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-500" /> الوضع المالي
@@ -689,19 +697,19 @@ const Dashboard: React.FC<DashboardProps> = ({ cases, clients, hearings, tasks =
                   <div className="space-y-3">
                      <div className="flex justify-between items-center text-sm">
                         <span className="text-slate-500 dark:text-slate-400">إجمالي الأتعاب</span>
-                        <span className="font-bold text-slate-800 dark:text-white">{cases.reduce((a,c)=>a+(c.finance?.agreedFees||0),0).toLocaleString()}</span>
+                        <span className="font-bold text-slate-800 dark:text-white">{totalAgreedFees.toLocaleString()}</span>
                      </div>
                      <div className="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                        <div className="bg-emerald-500 h-full" style={{width: '40%'}}></div>
+                        <div className="bg-emerald-500 h-full" style={{width: `${collectionPercentage}%`}}></div>
                      </div>
                      <div className="flex justify-between items-center text-xs text-slate-500 dark:text-slate-400 mt-1">
-                        <span>تم تحصيل: 40%</span>
+                        <span>تم تحصيل: {collectionPercentage}%</span>
                         <span className="text-red-500 dark:text-red-400 font-bold">متبقي: {totalDues.toLocaleString()}</span>
                      </div>
                   </div>
                   <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700">
-                     <p className="text-xs text-slate-400 mb-1">مصروفات هذا الشهر</p>
-                     <p className="font-bold text-slate-800 dark:text-white">1,250 ج.م</p>
+                     <p className="text-xs text-slate-400 mb-1">إجمالي المصروفات</p>
+                     <p className="font-bold text-slate-800 dark:text-white">{totalExpenses.toLocaleString()} ج.م</p>
                   </div>
                </div>
             )}

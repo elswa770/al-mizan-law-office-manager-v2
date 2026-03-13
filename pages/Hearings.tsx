@@ -46,10 +46,10 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
     try {
       const success = await syncNow();
       if (success) {
-        console.log('✅ Hearings synced successfully');
+        // console.log('✅ Hearings synced successfully');
       }
     } catch (error) {
-      console.error('❌ Sync failed:', error);
+      // console.error('❌ Sync failed:', error);
     } finally {
       setIsSyncing(false);
     }
@@ -61,7 +61,7 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
       const query = getCurrentPageSearchQuery();
       
       if (query) {
-        console.log('🔍 البحث الصوتي في الصفحة الحالية (الجلسات):', query);
+       // console.log('🔍 البحث الصوتي في الصفحة الحالية (الجلسات):', query);
         
         // Apply search to current page
         setSearchTerm(query);
@@ -74,7 +74,7 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
         // Show results count
         setTimeout(() => {
           const results = performCurrentPageSearch(query, 'hearings', hearings);
-          console.log(`🔍 نتائج البحث الصوتي في الجلسات: "${query}" - ${results.length} نتيجة`);
+         // console.log(`🔍 نتائج البحث الصوتي في الجلسات: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -90,7 +90,7 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في الجلسات:', { voiceSearchQuery, searchType, searchInCurrent });
+    // console.log('🔍 التحقق من البحث الصوتي في الجلسات:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -104,7 +104,7 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
                                normalizedQuery.includes('قاضي') || normalizedQuery.includes('محكمة') ||
                                normalizedQuery.includes('جلسات') || normalizedQuery.includes('موعد');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isHearingSearch });
+       // console.log('🎯 تحليل البحث:', { normalizedQuery, isHearingSearch });
         
         // Only apply search if it's actually for hearings
         if (isHearingSearch) {
@@ -125,10 +125,10 @@ const Hearings: React.FC<HearingsProps> = ({ hearings, cases, lawyers, onCaseCli
               hearing.type?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
             ).length;
             
-            console.log(`🔍 البحث الصوتي في الجلسات: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           // console.log(`🔍 البحث الصوتي في الجلسات: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للجلسات، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للجلسات، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking

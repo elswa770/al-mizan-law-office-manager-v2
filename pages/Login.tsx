@@ -250,13 +250,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onShowRegister }) => {
                 >
                   نسيت كلمة المرور؟
                 </button>
-                <button 
-                  type="button" 
-                  onClick={onShowRegister}
-                  className="text-primary-600 hover:text-primary-700 font-bold hover:underline"
-                >
-                  إنشاء حساب جديد
-                </button>
+
               </div>
             </div>
 

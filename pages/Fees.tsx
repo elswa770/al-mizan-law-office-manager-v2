@@ -38,7 +38,7 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
       const query = getCurrentPageSearchQuery();
       
       if (query) {
-        console.log('🔍 البحث الصوتي في الصفحة الحالية (المصاريف والاتعاب):', query);
+        // console.log('🔍 البحث الصوتي في الصفحة الحالية (المصاريف والاتعاب):', query);
         
         // Apply search to current page
         setSearchTerm(query);
@@ -71,7 +71,7 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
             (item as any).notes?.toLowerCase().includes(query.toLowerCase())
           );
           
-          console.log(`🔍 نتائج البحث الصوتي في المصاريف والاتعاب: "${query}" - ${results.length} نتيجة`);
+          // console.log(`🔍 نتائج البحث الصوتي في المصاريف والاتعاب: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -87,7 +87,7 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في المصاريف والاتعاب:', { voiceSearchQuery, searchType, searchInCurrent });
+    // console.log('🔍 التحقق من البحث الصوتي في المصاريف والاتعاب:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -106,11 +106,11 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
                              normalizedQuery.includes('أتعاب') || normalizedQuery.includes('أتعاب') ||
                              normalizedQuery.includes('مصروفية') || normalizedQuery.includes('مصروفيات');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isFeesSearch });
+        // console.log('🎯 تحليل البحث:', { normalizedQuery, isFeesSearch });
         
         // Only apply search if it's actually for fees
         if (isFeesSearch) {
-          console.log('✅ تطبيق البحث الصوتي للمصاريف والاتعاب:', voiceSearchQuery);
+          // console.log('✅ تطبيق البحث الصوتي للمصاريف والاتعاب:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -138,10 +138,10 @@ const Fees: React.FC<FeesProps> = ({ cases, clients, hearings, onUpdateCase, onA
               (item as any).notes?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
             ).length;
             
-            console.log(`🔍 البحث الصوتي في المصاريف والاتعاب: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           //  console.log(`🔍 البحث الصوتي في المصاريف والاتعاب: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للمصاريف والاتعاب، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للمصاريف والاتعاب، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking

@@ -37,7 +37,7 @@ const Reports: React.FC<ReportsProps> = ({ cases, clients, hearings, tasks }) =>
       const query = getCurrentPageSearchQuery();
       
       if (query) {
-        console.log('🔍 البحث الصوتي في الصفحة الحالية (التقارير):', query);
+        // console.log('🔍 البحث الصوتي في الصفحة الحالية (التقارير):', query);
         
         // Apply search to current page
         setSearchTerm(query);
@@ -66,7 +66,7 @@ const Reports: React.FC<ReportsProps> = ({ cases, clients, hearings, tasks }) =>
             )
           );
           
-          console.log(`🔍 نتائج البحث الصوتي في التقارير: "${query}" - ${results.length} نتيجة`);
+          // console.log(`🔍 نتائج البحث الصوتي في التقارير: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -82,7 +82,7 @@ const Reports: React.FC<ReportsProps> = ({ cases, clients, hearings, tasks }) =>
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في التقارير:', { voiceSearchQuery, searchType, searchInCurrent });
+    // console.log('🔍 التحقق من البحث الصوتي في التقارير:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -99,11 +99,11 @@ const Reports: React.FC<ReportsProps> = ({ cases, clients, hearings, tasks }) =>
                                normalizedQuery.includes('دراسة') || normalizedQuery.includes('بحث') ||
                                normalizedQuery.includes('كشف') || normalizedQuery.includes('قائمة');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isReportSearch });
+        // console.log('🎯 تحليل البحث:', { normalizedQuery, isReportSearch });
         
         // Only apply search if it's actually for reports
         if (isReportSearch) {
-          console.log('✅ تطبيق البحث الصوتي للتقارير:', voiceSearchQuery);
+          // console.log('✅ تطبيق البحث الصوتي للتقارير:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -129,10 +129,10 @@ const Reports: React.FC<ReportsProps> = ({ cases, clients, hearings, tasks }) =>
               )
             ).length;
             
-            console.log(`🔍 البحث الصوتي في التقارير: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           // console.log(`🔍 البحث الصوتي في التقارير: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للتقارير، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للتقارير، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking

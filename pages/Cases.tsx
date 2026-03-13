@@ -64,7 +64,7 @@ const Cases: React.FC<CasesProps> = ({
         // Show results count
         setTimeout(() => {
           const results = performCurrentPageSearch(query, 'cases', cases);
-          console.log(`🔍 نتائج البحث الصوتي في القضايا: "${query}" - ${results.length} نتيجة`);
+          // console.log(`🔍 نتائج البحث الصوتي في القضايا: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -80,7 +80,7 @@ const Cases: React.FC<CasesProps> = ({
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في القضايا:', { voiceSearchQuery, searchType, searchInCurrent });
+    // console.log('🔍 التحقق من البحث الصوتي في القضايا:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -99,11 +99,11 @@ const Cases: React.FC<CasesProps> = ({
                            normalizedQuery.includes('نقض') || normalizedQuery.includes('خصم') ||
                            normalizedQuery.includes('الخصومة') || normalizedQuery.includes('محاكم');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isCaseSearch });
+        // console.log('🎯 تحليل البحث:', { normalizedQuery, isCaseSearch });
         
         // Only apply search if it's actually for cases
         if (isCaseSearch) {
-          console.log('✅ تطبيق البحث الصوتي للقضايا:', voiceSearchQuery);
+          // console.log('✅ تطبيق البحث الصوتي للقضايا:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -120,10 +120,10 @@ const Cases: React.FC<CasesProps> = ({
               c.court.toLowerCase().includes(voiceSearchQuery.toLowerCase())
             ).length;
             
-            console.log(`🔍 البحث الصوتي في القضايا: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+            // console.log(`🔍 البحث الصوتي في القضايا: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للقضايا، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للقضايا، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking
@@ -143,7 +143,7 @@ const Cases: React.FC<CasesProps> = ({
   
   // Force re-render when cases change (for offline updates)
   useEffect(() => {
-    console.log('🔄 Cases.tsx - Cases prop changed:', cases.length);
+    // console.log('🔄 Cases.tsx - Cases prop changed:', cases.length);
     setForceRerender(prev => prev + 1);
   }, [cases]);
 

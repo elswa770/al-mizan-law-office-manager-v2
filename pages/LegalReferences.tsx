@@ -61,7 +61,7 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
             ref.type.toLowerCase().includes(query.toLowerCase())
           );
           
-          console.log(`🔍 نتائج البحث الصوتي في المراجع القانونية: "${query}" - ${results.length} نتيجة`);
+         // console.log(`🔍 نتائج البحث الصوتي في المراجع القانونية: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -77,7 +77,7 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في المراجع القانونية:', { voiceSearchQuery, searchType, searchInCurrent });
+   // console.log('🔍 التحقق من البحث الصوتي في المراجع القانونية:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -99,11 +99,11 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
                                        normalizedQuery.includes('رأي') || normalizedQuery.includes('آراء') ||
                                        normalizedQuery.includes('محكمة') || normalizedQuery.includes('محاكم');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isLegalReferenceSearch });
+        // console.log('🎯 تحليل البحث:', { normalizedQuery, isLegalReferenceSearch });
         
         // Only apply search if it's actually for legal references
         if (isLegalReferenceSearch) {
-          console.log('✅ تطبيق البحث الصوتي للمراجع القانونية:', voiceSearchQuery);
+          // console.log('✅ تطبيق البحث الصوتي للمراجع القانونية:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -125,10 +125,10 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
               ref.type.toLowerCase().includes(voiceSearchQuery.toLowerCase())
             ).length;
             
-            console.log(`🔍 البحث الصوتي في المراجع القانونية: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           // console.log(`🔍 البحث الصوتي في المراجع القانونية: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للمراجع القانونية، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للمراجع القانونية، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking
@@ -189,9 +189,9 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
     try {
       const firebaseRefs = await getLegalReferences();
       setFirebaseReferences(firebaseRefs);
-      console.log('✅ Loaded references from Firebase:', firebaseRefs.length);
+      // console.log('✅ Loaded references from Firebase:', firebaseRefs.length);
     } catch (error) {
-      console.error('❌ Error loading Firebase references:', error);
+      // console.error('❌ Error loading Firebase references:', error);
     } finally {
       setIsLoadingFirebase(false);
     }
@@ -204,11 +204,11 @@ const LegalReferences: React.FC<LegalReferencesProps> = ({ references, onAddRefe
     // Initialize Google Drive service
     const initializeGoogleDrive = async () => {
       try {
-        console.log('Initializing Google Drive service...');
+        // console.log('Initializing Google Drive service...');
         await googleDriveService.initialize();
-        console.log('Google Drive service initialized successfully');
+        // console.log('Google Drive service initialized successfully');
       } catch (error) {
-        console.error('Failed to initialize Google Drive service:', error);
+       // console.error('Failed to initialize Google Drive service:', error);
       }
     };
     

@@ -57,7 +57,7 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
       const query = getCurrentPageSearchQuery();
       
       if (query) {
-        console.log('🔍 البحث الصوتي في الصفحة الحالية (المواقع):', query);
+       // console.log('🔍 البحث الصوتي في الصفحة الحالية (المواقع):', query);
         
         // Apply search to current page
         setSearchTerm(query);
@@ -77,7 +77,7 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
             location.phone?.includes(query)
           );
           
-          console.log(`🔍 نتائج البحث الصوتي في المواقع: "${query}" - ${results.length} نتيجة`);
+         // console.log(`🔍 نتائج البحث الصوتي في المواقع: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -93,7 +93,7 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في المواقع:', { voiceSearchQuery, searchType, searchInCurrent });
+   // console.log('🔍 التحقق من البحث الصوتي في المواقع:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -111,11 +111,11 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
                                normalizedQuery.includes('فرع') || normalizedQuery.includes('فروع') ||
                                normalizedQuery.includes('تليفون') || normalizedQuery.includes('هاتف');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isLocationSearch });
+       // console.log('🎯 تحليل البحث:', { normalizedQuery, isLocationSearch });
         
         // Only apply search if it's actually for locations
         if (isLocationSearch) {
-          console.log('✅ تطبيق البحث الصوتي للمواقع:', voiceSearchQuery);
+         // console.log('✅ تطبيق البحث الصوتي للمواقع:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -133,10 +133,10 @@ const Locations: React.FC<LocationsProps> = ({ readOnly = false }) => {
               location.phone?.includes(voiceSearchQuery)
             ).length;
             
-            console.log(`🔍 البحث الصوتي في المواقع: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           // console.log(`🔍 البحث الصوتي في المواقع: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للمواقع، سيتم تجاهله:', voiceSearchQuery);
+         // console.log('❌ هذا البحث ليس للمواقع، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking

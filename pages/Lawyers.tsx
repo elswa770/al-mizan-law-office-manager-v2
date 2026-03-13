@@ -39,7 +39,7 @@ const Lawyers: React.FC<LawyersProps> = ({
       const query = getCurrentPageSearchQuery();
       
       if (query) {
-        console.log('🔍 البحث الصوتي في الصفحة الحالية (المحامين):', query);
+        // console.log('🔍 البحث الصوتي في الصفحة الحالية (المحامين):', query);
         
         // Apply search to current page
         setSearchTerm(query);
@@ -66,7 +66,7 @@ const Lawyers: React.FC<LawyersProps> = ({
             lawyer.barLevel.toLowerCase().includes(query.toLowerCase())
           );
           
-          console.log(`🔍 نتائج البحث الصوتي في المحامين: "${query}" - ${results.length} نتيجة`);
+          // console.log(`🔍 نتائج البحث الصوتي في المحامين: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -82,7 +82,7 @@ const Lawyers: React.FC<LawyersProps> = ({
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في المحامين:', { voiceSearchQuery, searchType, searchInCurrent });
+    // console.log('🔍 التحقق من البحث الصوتي في المحامين:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -100,11 +100,11 @@ const Lawyers: React.FC<LawyersProps> = ({
                               normalizedQuery.includes('مستشار') || normalizedQuery.includes('خبير') ||
                               normalizedQuery.includes('محكمة') || normalizedQuery.includes('قاضي');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isLawyerSearch });
+        // console.log('🎯 تحليل البحث:', { normalizedQuery, isLawyerSearch });
         
         // Only apply search if it's actually for lawyers
         if (isLawyerSearch) {
-          console.log('✅ تطبيق البحث الصوتي للمحامين:', voiceSearchQuery);
+          // console.log('✅ تطبيق البحث الصوتي للمحامين:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -129,10 +129,10 @@ const Lawyers: React.FC<LawyersProps> = ({
               lawyer.barLevel.toLowerCase().includes(voiceSearchQuery.toLowerCase())
             ).length;
             
-            console.log(`🔍 البحث الصوتي في المحامين: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           // console.log(`🔍 البحث الصوتي في المحامين: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للمحامين، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للمحامين، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking

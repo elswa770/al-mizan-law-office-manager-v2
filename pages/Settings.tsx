@@ -2035,7 +2035,7 @@ const Settings: React.FC<SettingsProps> = ({
           ...doc.data()
         })) as ActiveSession[];
         
-        console.log(`Loaded ${sessions.length} active sessions for user ${currentUser.uid}`);
+        // console.log(`Loaded ${sessions.length} active sessions for user ${currentUser.uid}`);
         setActiveSessions(sessions);
 
         // Load login attempts for current user only
@@ -2051,7 +2051,7 @@ const Settings: React.FC<SettingsProps> = ({
           ...doc.data()
         })) as LoginAttempt[];
         
-        console.log(`Loaded ${attempts.length} login attempts for user ${currentUser.uid}`);
+        // console.log(`Loaded ${attempts.length} login attempts for user ${currentUser.uid}`);
         setLoginAttempts(attempts);
 
         // Load IP Whitelist from Firebase
@@ -2067,7 +2067,7 @@ const Settings: React.FC<SettingsProps> = ({
         logSecurityActivity('security_data_loaded', `Loaded ${sessions.length} sessions and ${attempts.length} attempts`, 'low');
 
       } catch (error) {
-        console.error('Error loading security data:', error);
+        // console.error('Error loading security data:', error);
         logSecurityActivity('security_data_error', `Failed to load security data: ${error}`, 'high');
       }
     };
@@ -2091,7 +2091,7 @@ const Settings: React.FC<SettingsProps> = ({
         })) as ActiveSession[];
         
         setActiveSessions(sessions);
-        console.log(`Real-time update: ${sessions.length} active sessions`);
+        // console.log(`Real-time update: ${sessions.length} active sessions`);
       });
 
       return () => unsubscribe();
@@ -2122,7 +2122,7 @@ const Settings: React.FC<SettingsProps> = ({
               lastActive: new Date().toISOString(),
               isCurrent: true
             });
-            console.log('Updated existing device session:', existingDoc.id);
+            // console.log('Updated existing device session:', existingDoc.id);
             return;
           }
           
@@ -2142,7 +2142,7 @@ const Settings: React.FC<SettingsProps> = ({
               batch.delete(sessions[i].ref);
             }
             await batch.commit();
-            console.log(`Cleaned up ${sessions.length - 5} old sessions`);
+            // console.log(`Cleaned up ${sessions.length - 5} old sessions`);
           }
           
           // Create new session for this device (keep other sessions active)
@@ -2159,10 +2159,10 @@ const Settings: React.FC<SettingsProps> = ({
           };
 
           await setDoc(doc(db, 'activeSessions', sessionData.id), sessionData);
-          console.log('New session created for device:', sessionData.id);
+          // console.log('New session created for device:', sessionData.id);
         }
       } catch (error) {
-        console.error('Error adding current session:', error);
+        // console.error('Error adding current session:', error);
       }
     };
 
@@ -2192,7 +2192,7 @@ const Settings: React.FC<SettingsProps> = ({
           }
         }
       } catch (error) {
-        console.error('Error updating session activity:', error);
+        // console.error('Error updating session activity:', error);
       }
     }, 60000); // Update every minute
 
@@ -2232,9 +2232,9 @@ const Settings: React.FC<SettingsProps> = ({
       // Update local state
       setLoginAttempts(prev => [attemptData, ...prev].slice(0, 50));
       
-      console.log(`🔐 Login attempt logged: ${username} - ${success ? 'SUCCESS' : 'FAILED'} - ${ip}`);
+      // console.log(`🔐 Login attempt logged: ${username} - ${success ? 'SUCCESS' : 'FAILED'} - ${ip}`);
     } catch (error) {
-      console.error('Error logging login attempt:', error);
+      // console.error('Error logging login attempt:', error);
     }
   };
 
@@ -2265,7 +2265,7 @@ const Settings: React.FC<SettingsProps> = ({
         }
       }
     } catch (error) {
-      console.error('Error loading password policy from Firebase:', error);
+      // console.error('Error loading password policy from Firebase:', error);
       logSecurityActivity('password_policy_load_error', `Failed to load password policy: ${error}`, 'high');
     }
   };
@@ -2307,7 +2307,7 @@ const Settings: React.FC<SettingsProps> = ({
           ).slice(0, 50);
         });
         
-        console.log(`Loaded ${failedAttempts.length} failed login attempts`);
+        // console.log(`Loaded ${failedAttempts.length} failed login attempts`);
       }
     } catch (error) {
       console.error('Error loading failed login attempts:', error);
@@ -2858,7 +2858,7 @@ const Settings: React.FC<SettingsProps> = ({
       alert(`✅ تم إنشاء نسخة احتياطية يدوية بنجاح!\n\n📊 تفاصيل النسخة:\n- التاريخ: ${now}\n- القضايا: ${cases.length}\n- العملاء: ${clients.length}\n- الجلسات: ${hearings.length}\n- المستخدمون: ${users.length}\n\n🔥 تم حفظ النسخة في Firebase Firestore\n📁 اسم الملف: ${filename}\n📍 الموقع: ${downloadURL}`);
 
     } catch (error) {
-      console.error('Manual backup failed:', error);
+      // console.error('Manual backup failed:', error);
       alert('❌ فشل إنشاء النسخة الاحتياطية: ' + error.message);
     } finally {
       setIsBackingUp(false);
@@ -2909,10 +2909,10 @@ const Settings: React.FC<SettingsProps> = ({
       setLastBackupDate(now);
       localStorage.setItem('app_last_backup_date', now);
       
-      console.log('Automatic backup completed successfully');
+      // console.log('Automatic backup completed successfully');
       
     } catch (error) {
-      console.error('Automatic backup failed:', error);
+      // console.error('Automatic backup failed:', error);
     }
   };
 
@@ -3023,7 +3023,7 @@ const Settings: React.FC<SettingsProps> = ({
       }, 2000);
 
     } catch (error) {
-      console.error("Restore from Firebase Error:", error);
+      // console.error("Restore from Firebase Error:", error);
       alert("❌ فشل استعادة النسخة الاحتياطية: " + error.message);
     } finally {
       setIsRestoring(false);
@@ -3064,7 +3064,7 @@ const Settings: React.FC<SettingsProps> = ({
            }
 
         } catch (error) {
-           console.error("Restore Error:", error);
+           // console.error("Restore Error:", error);
            alert("فشل استعادة البيانات. الملف قد يكون تالفاً.");
         } finally {
            setIsRestoring(false);
@@ -3184,7 +3184,7 @@ const Settings: React.FC<SettingsProps> = ({
         setActiveSessions(prev => prev.filter(s => s.id !== sessionId));
         alert('✅ تم إنهاء الجلسة بنجاح');
       } catch (error) {
-        console.error('Error terminating session:', error);
+        // console.error('Error terminating session:', error);
         alert('❌ فشل إنهاء الجلسة');
       }
     }
@@ -3279,7 +3279,7 @@ const Settings: React.FC<SettingsProps> = ({
               ...prev,
               ipWhitelist: data.ipWhitelist
             }));
-            console.log('IP Whitelist loaded from Firebase:', data.ipWhitelist);
+            // console.log('IP Whitelist loaded from Firebase:', data.ipWhitelist);
           }
         }
       }
@@ -4155,10 +4155,10 @@ const Settings: React.FC<SettingsProps> = ({
       await uploadBytes(storageRef, blob);
       const downloadURL = await getDownloadURL(storageRef);
       
-      console.log('✅ Logo uploaded to Firebase Storage:', downloadURL);
+      // console.log('✅ Logo uploaded to Firebase Storage:', downloadURL);
       return downloadURL;
     } catch (error) {
-      console.error('❌ Error uploading logo to Firebase:', error);
+      // console.error('❌ Error uploading logo to Firebase:', error);
       throw error;
     }
   };
@@ -4187,9 +4187,9 @@ const Settings: React.FC<SettingsProps> = ({
           // Save to Firebase
           await saveSettingsToFirebase('generalSettings', updatedSettings);
           
-          console.log('✅ Logo uploaded and settings saved to Firebase');
+          // console.log('✅ Logo uploaded and settings saved to Firebase');
         } catch (error) {
-          console.error('❌ Failed to upload logo to Firebase:', error);
+          // console.error('❌ Failed to upload logo to Firebase:', error);
           // Keep local preview even if upload fails
         }
       };
@@ -4248,7 +4248,7 @@ const Settings: React.FC<SettingsProps> = ({
     } catch (error) {
       setIsSaving(false);
       alert('حدث خطأ أثناء الحفظ في السحابة، تم الحفظ محلياً فقط');
-      console.error('Firebase save error:', error);
+      // console.error('Firebase save error:', error);
     }
   };
 

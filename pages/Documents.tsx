@@ -100,7 +100,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
             doc.clientName && doc.clientName.toLowerCase().includes(query.toLowerCase())
           );
           
-          console.log(`🔍 نتائج البحث الصوتي في المستندات: "${query}" - ${results.length} نتيجة`);
+          // console.log(`🔍 نتائج البحث الصوتي في المستندات: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -116,7 +116,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في المستندات:', { voiceSearchQuery, searchType, searchInCurrent });
+    // console.log('🔍 التحقق من البحث الصوتي في المستندات:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -133,7 +133,7 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
                                normalizedQuery.includes('تقرير') || normalizedQuery.includes('محضر') ||
                                normalizedQuery.includes('مستندات') || normalizedQuery.includes('ملفات');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isDocumentSearch });
+        // console.log('🎯 تحليل البحث:', { normalizedQuery, isDocumentSearch });
         
         // Only apply search if it's actually for documents
         if (isDocumentSearch) {
@@ -157,10 +157,10 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
               doc.clientName?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
             ).length;
             
-            console.log(`🔍 البحث الصوتي في المستندات: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           // console.log(`🔍 البحث الصوتي في المستندات: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للمستندات، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للمستندات، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking
@@ -198,9 +198,9 @@ const Documents: React.FC<DocumentsProps> = ({ cases, clients, onCaseClick, onCl
     const initGoogleDrive = async () => {
       try {
         await googleDriveService.initialize();
-        console.log('Google Drive initialized successfully');
+        // console.log('Google Drive initialized successfully');
       } catch (error) {
-        console.error('Google Drive initialization failed:', error);
+        // console.error('Google Drive initialization failed:', error);
       }
     };
     initGoogleDrive();

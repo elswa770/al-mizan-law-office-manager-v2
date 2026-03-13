@@ -41,7 +41,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
       const query = getCurrentPageSearchQuery();
       
       if (query) {
-        console.log('🔍 البحث الصوتي في الصفحة الحالية (الأرشيف):', query);
+        // console.log('🔍 البحث الصوتي في الصفحة الحالية (الأرشيف):', query);
         
         // Apply search to current page
         setSearchTerm(query);
@@ -76,7 +76,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
             (item as any).archiveLocation?.name?.toLowerCase().includes('مخزن')
           );
           
-          console.log(`🔍 نتائج البحث الصوتي في الأرشيف: "${query}" - ${results.length} نتيجة`);
+          // console.log(`🔍 نتائج البحث الصوتي في الأرشيف: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -92,7 +92,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في الأرشيف:', { voiceSearchQuery, searchType, searchInCurrent });
+    // console.log('🔍 التحقق من البحث الصوتي في الأرشيف:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -118,11 +118,11 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
                                normalizedQuery.includes('صندوق') || normalizedQuery.includes('دولاب') ||
                                normalizedQuery.includes('خزنة') || normalizedQuery.includes('مخزن');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isArchiveSearch });
+        // console.log('🎯 تحليل البحث:', { normalizedQuery, isArchiveSearch });
         
         // Only apply search if it's actually for archive
         if (isArchiveSearch) {
-          console.log('✅ تطبيق البحث الصوتي للأرشيف:', voiceSearchQuery);
+          // console.log('✅ تطبيق البحث الصوتي للأرشيف:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -154,10 +154,10 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
               (item as any).archiveLocation?.name?.toLowerCase().includes('مخزن')
             ).length;
             
-            console.log(`🔍 البحث الصوتي في الأرشيف: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+            // console.log(`🔍 البحث الصوتي في الأرشيف: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للأرشيف، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للأرشيف، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking
@@ -181,7 +181,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
       const query = getCurrentPageSearchQuery();
       
       if (query) {
-        console.log('🔍 البحث الصوتي في الصفحة الحالية (الأرشيف):', query);
+        // console.log('🔍 البحث الصوتي في الصفحة الحالية (الأرشيف):', query);
         
         // Apply search to current page
         setSearchTerm(query);
@@ -208,7 +208,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
             (item as any).archiveRequest?.title?.toLowerCase().includes(query.toLowerCase())
           );
           
-          console.log(`🔍 نتائج البحث الصوتي في الأرشيف: "${query}" - ${results.length} نتيجة`);
+          // console.log(`🔍 نتائج البحث الصوتي في الأرشيف: "${query}" - ${results.length} نتيجة`);
         }, 500);
         
         // Clear search after applying
@@ -224,7 +224,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
     const searchType = localStorage.getItem('searchType');
     const searchInCurrent = localStorage.getItem('searchInCurrentPage');
     
-    console.log('🔍 التحقق من البحث الصوتي في الأرشيف:', { voiceSearchQuery, searchType, searchInCurrent });
+   // console.log('🔍 التحقق من البحث الصوتي في الأرشيف:', { voiceSearchQuery, searchType, searchInCurrent });
     
     // Only apply legacy search if not current page search
     if (voiceSearchQuery && voiceSearchTimestamp && searchType === 'voice' && !searchInCurrent) {
@@ -246,11 +246,11 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
                                normalizedQuery.includes('قضية') || normalizedQuery.includes('قضايا') ||
                                normalizedQuery.includes('مؤرشفة') || normalizedQuery.includes('مؤرشفات');
         
-        console.log('🎯 تحليل البحث:', { normalizedQuery, isArchiveSearch });
+       // console.log('🎯 تحليل البحث:', { normalizedQuery, isArchiveSearch });
         
         // Only apply search if it's actually for archive
         if (isArchiveSearch) {
-          console.log('✅ تطبيق البحث الصوتي للأرشيف:', voiceSearchQuery);
+          // console.log('✅ تطبيق البحث الصوتي للأرشيف:', voiceSearchQuery);
           setSearchTerm(voiceSearchQuery);
           
           // Add to recent searches
@@ -275,10 +275,10 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
               (item as any).archiveRequest?.title?.toLowerCase().includes(voiceSearchQuery.toLowerCase())
             ).length;
             
-            console.log(`🔍 البحث الصوتي في الأرشيف: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
+           // console.log(`🔍 البحث الصوتي في الأرشيف: "${voiceSearchQuery}" - ${resultsCount} نتيجة`);
           }, 500);
         } else {
-          console.log('❌ هذا البحث ليس للأرشيف، سيتم تجاهله:', voiceSearchQuery);
+          // console.log('❌ هذا البحث ليس للأرشيف، سيتم تجاهله:', voiceSearchQuery);
         }
         
         // Always clear the stored voice search after checking
@@ -316,7 +316,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
       onUpdateCase(updatedCase);
       alert(`تم تحديث حالة القضية إلى "${newStatus === CaseStatus.CLOSED ? 'مغلقة' : 'مؤرشفة'}" بنجاح`);
     } catch (error) {
-      console.error('Error updating case status:', error);
+      // console.error('Error updating case status:', error);
       alert('حدث خطأ أثناء تحديث حالة القضية');
     }
   };
@@ -397,7 +397,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
       } as ArchiveRequest));
       setRequests(requestsData);
     }, (error) => {
-      console.error('Error listening to requests:', error);
+      // console.error('Error listening to requests:', error);
     });
 
     return () => unsubscribe();
@@ -415,7 +415,7 @@ const ArchivePage: React.FC<ArchiveProps> = ({ cases, clients, onUpdateCase, onN
         } as ArchiveRequest));
         setRequests(requestsData);
       } catch (error) {
-        console.error('Error refreshing requests:', error);
+       // console.error('Error refreshing requests:', error);
       }
     };
 
